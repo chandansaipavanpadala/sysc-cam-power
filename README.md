@@ -16,6 +16,20 @@ This project implements an ESL cycle-accurate power estimation model of a 10-ent
 
 ---
 
+## Application Domains & Construction Industry Utility
+
+Content Addressable Memory (CAM) provides single-cycle parallel $O(1)$ lookup capability. This high-speed parallel matching architecture is critical in domain-specific edge SoC computing:
+
+### 1. Smart Construction Site Safety & Structural Health Monitoring (SHM) IoT Networks
+In smart construction site monitoring, wireless IoT sensor nodes equipped with multi-axis accelerometers, strain gauges, temperature sensors, and tilt meters continuously evaluate structural integrity and worker safety metrics. 
+
+CAM modules operating on edge hardware act as ultra-low-latency anomaly detectors. Sensor measurement vectors are matched in parallel against pre-programmed structural hazard thresholds. Modeling match-line dynamic power dissipation in SystemC enables hardware designers to optimize power budgets and maximize battery operating lifetimes for wireless sensor nodes deployed on construction sites.
+
+### 2. High-Speed Network IP Routing & Packet Processing
+In high-throughput enterprise routing hardware, CAM modules process network packet headers in parallel, matching IP addresses against stored forwarding table entries in a single clock cycle. SystemC power estimation models the dynamic power scaling during high-frequency IP address lookups.
+
+---
+
 ## Architecture & Microarchitecture
 
 ### System-Level Integration Architecture
@@ -338,8 +352,13 @@ The testbench (`main.cpp`) executes 5 verification scenarios:
 
 The simulation automatically logs value changes into `Backend/cam_trace.vcd` (Value Change Dump).
 
-### Inspecting Traces with GTKWave Desktop
-1. Launch GTKWave.
+### Method 1: Online VCD Waveform Viewer (drom.io)
+1. Open the browser-based VCD viewer at [https://vc.drom.io/](https://vc.drom.io/).
+2. Drag and drop or upload the generated `Backend/cam_trace.vcd` file into the online viewer interface.
+3. Select signals (`clk`, `enable`, `write_en`, `search_pattern`, `match_found`, `match_addr`, `estimated_power_mw`) to render digital timing waveforms instantly without installing local software.
+
+### Method 2: Desktop Waveform Inspection via GTKWave
+1. Launch GTKWave desktop application.
 2. Select **File -> Open Trace** and open `Backend/cam_trace.vcd`.
 3. Expand the module tree under `SystemC -> CAM_Inst`.
 4. Select `clk`, `enable`, `write_en`, `search_pattern`, `match_found`, `match_addr`, and `estimated_power_mw`.

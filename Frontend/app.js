@@ -463,7 +463,7 @@ function togglePlayPause() {
 
 function playSimulation() {
     state.isPlaying = true;
-    elements.btnPlay.textContent = '⏸️ Pause';
+    elements.btnPlay.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> <span>Pause</span>';
     state.timer = setInterval(() => {
         if (state.currentCycleIndex < (state.simulationData?.cycles?.length || 1) - 1) {
             renderCycle(state.currentCycleIndex + 1);
@@ -475,7 +475,7 @@ function playSimulation() {
 
 function pauseSimulation() {
     state.isPlaying = false;
-    elements.btnPlay.textContent = '▶️ Play';
+    elements.btnPlay.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span>Play</span>';
     if (state.timer) clearInterval(state.timer);
 }
 
