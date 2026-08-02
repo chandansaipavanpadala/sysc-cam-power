@@ -9,6 +9,7 @@ const { exec } = require('child_process');
 
 const PORT = 3000;
 const PUBLIC_DIR = __dirname;
+const BACKEND_DIR = path.join(__dirname, '../Backend');
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -31,9 +32,9 @@ const server = http.createServer((req, res) => {
                 const params = JSON.parse(body);
                 console.log('Received custom simulation parameters:', params);
 
-                // Run sim.exe --no-pause to refresh trace
-                exec('.\\sim.exe --no-pause', { cwd: PUBLIC_DIR }, (err, stdout, stderr) => {
-                    const jsonPath = path.join(PUBLIC_DIR, 'simulation_data.json');
+                // Run sim.exe --no-pause inside Backend directory
+                exec('.\\sim.exe --no-pause', { cwd: BACKEND_DIR }, (err, stdout, stderr) => {
+                    const jsonPath = path.join(BACKEND_DIR, 'simulation_data.json');
                     fs.readFile(jsonPath, 'utf8', (readErr, data) => {
                         if (readErr) {
                             res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -54,12 +55,12 @@ const server = http.createServer((req, res) => {
     // API Endpoint: /api/recompile
     if (req.method === 'POST' && req.url === '/api/recompile') {
         const cmd = 'g++ -std=c++17 -DSC_ALLOW_DEPRECATED_IEEE_API -I C:/systemc/include -L C:/systemc/lib main.cpp cam_power_model.cpp -lsystemc -o sim.exe && .\\sim.exe --no-pause';
-        exec(cmd, { cwd: PUBLIC_DIR }, (err, stdout, stderr) => {
+        exec(cmd, { cwd: BACKEND_DIR }, (err, stdout, stderr) => {
             if (err) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ error: stderr || err.message }));
             }
-            const jsonPath = path.join(PUBLIC_DIR, 'simulation_data.json');
+            const jsonPath = path.join(BACKEND_DIR, 'simulation_data.json');
             fs.readFile(jsonPath, 'utf8', (readErr, data) => {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(data || JSON.stringify({ status: 'ok' }));
@@ -68,8 +69,14 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Static File Serving
-    let filePath = path.join(PUBLIC_DIR, req.url === '/' ? 'index.html' : req.url.split('?')[0]);
+    // Static File Serving (serve simulation_data.json from Backend, everything else from Frontend)
+    const reqUrlClean = req.url.split('?')[0];
+    let filePath;
+    if (reqUrlClean === '/simulation_data.json') {
+        filePath = path.join(BACKEND_DIR, 'simulation_data.json');
+    } else {
+        filePath = path.join(PUBLIC_DIR, reqUrlClean === '/' ? 'index.html' : reqUrlClean);
+    }
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
