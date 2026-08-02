@@ -99,24 +99,24 @@ graph TD
 ### 1. Parallel Match-Line Bitwise XOR Evaluation
 In a binary Content Addressable Memory, each entry compares all 16 bits simultaneously against the query `search_pattern` using bitwise XOR logic:
 
-$$\text{mismatch\_map}_i = \text{cam\_array}[i] \oplus \text{search\_pattern}$$
+$$\text{MismatchMap}_i = \text{CamArray}[i] \oplus \text{SearchPattern}$$
 
 For each bit position $b \in \{0, \dots, 15\}$, the bitwise mismatch is evaluated. The total bit mismatches for line $i$ is calculated as:
 
-$$\text{line\_mismatches}_i = \sum_{b=0}^{15} \text{mismatch\_map}_i[b]$$
+$$\text{LineMismatches}_i = \sum_{b=0}^{15} \text{MismatchMap}_i[b]$$
 
-If $\text{line\_mismatches}_i = 0$, entry $i$ is designated a **MATCH (HIT)**.
+If $\text{LineMismatches}_i = 0$, entry $i$ is designated a **MATCH (HIT)**.
 
 ### 2. Match-Line Dynamic Power Formula
 In physical CMOS CAM designs, match-lines are pre-charged to $V_{DD}$ every clock cycle. Any mismatched bit pair turns on a discharge path, dumping the pre-charged line capacitance to ground and consuming dynamic energy.
 
 The system-level power model computes instantaneous match-line power per cycle according to:
 
-$$P_{\text{total}} = P_{\text{leakage}} + \left( \sum_{i=0}^{\text{DEPTH}-1} \text{line\_mismatches}_i \right) \times E_{\text{mismatch\_factor}}$$
+$$P_{\text{total}} = P_{\text{leakage}} + \left( \sum_{i=0}^{\text{DEPTH}-1} \text{LineMismatches}_i \right) \times E_{\text{mismatch-factor}}$$
 
 Where empirical model coefficients are defined as:
 * Static Base Leakage Floor ($P_{\text{leakage}}$): $0.002 \text{ mW}$ ($2 \ \mu\text{W}$)
-* Dynamic Mismatch Energy Coefficient ($E_{\text{mismatch\_factor}}$): $0.015 \text{ mW per mismatched bit}$
+* Dynamic Mismatch Energy Coefficient ($E_{\text{mismatch-factor}}$): $0.015 \text{ mW per mismatched bit}$
 
 ### 3. Accumulated Energy Formula
 Total accumulated energy across $N$ simulation cycles is given by:
