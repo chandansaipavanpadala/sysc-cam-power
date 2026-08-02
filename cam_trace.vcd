@@ -1,0 +1,85 @@
+$date
+     Aug 02, 2026       21:04:39
+$end
+
+$version
+ SystemC 3.0.2-Accellera --- Aug  1 2026 08:17:32
+$end
+
+$timescale
+     1 ns
+$end
+
+$scope module SystemC $end
+$var wire    1  aaaaa  clk       $end
+$var wire    1  aaaab  enable       $end
+$var wire    1  aaaac  write_en       $end
+$var wire    4  aaaad  write_addr [3:0]  $end
+$var wire   16  aaaae  search_pattern [15:0]  $end
+$var wire   16  aaaaf  write_data [15:0]  $end
+$var wire    1  aaaag  match_found       $end
+$var wire    4  aaaah  match_addr [3:0]  $end
+$var real    1  aaaai  estimated_power_mw       $end
+$upscope $end
+$enddefinitions  $end
+
+$comment
+All initial values are dumped below at time 0 sec = 0 timescale units.
+$end
+
+$dumpvars
+1aaaaa
+1aaaab
+0aaaac
+b0 aaaad
+b1010010110100101 aaaae
+b0 aaaaf
+1aaaag
+b0 aaaah
+r0.317 aaaai
+$end
+
+#5
+0aaaaa
+
+#10
+1aaaaa
+b101101001011010 aaaae
+0aaaag
+r2.087 aaaai
+
+#15
+0aaaaa
+
+#20
+1aaaaa
+1aaaac
+b101 aaaad
+b1101111010101101 aaaaf
+r0.002 aaaai
+
+#25
+0aaaaa
+
+#30
+1aaaaa
+0aaaac
+b1101111010101101 aaaae
+1aaaag
+b101 aaaah
+r1.022 aaaai
+
+#35
+0aaaaa
+
+#40
+1aaaaa
+b1010010110100100 aaaae
+0aaaag
+b0 aaaah
+r0.392 aaaai
+
+#45
+0aaaaa
+
+#50

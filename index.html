@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SystemC CAM Power Estimation Model - Interactive Visual EDA Workbench</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Header -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="logo-icon">
+                    <span class="chip-symbol">⚡</span>
+                </div>
+                <div class="brand-text">
+                    <h1>SystemC CAM Power Visualizer</h1>
+                    <p class="subtitle">ESL Content Addressable Memory (CAM) Power & Timing Simulator</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="status-badge live" id="system-status">
+                    <span class="pulse-dot"></span>
+                    <span id="status-text">SystemC Engine Ready</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-recompile">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    Run SystemC Backend
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Layout -->
+        <main class="dashboard-grid">
+            <!-- Left Panel: Control Center & Metric Gauges -->
+            <section class="panel control-panel">
+                <div class="panel-header">
+                    <h2><span class="icon">🎛️</span> Simulation Controls</h2>
+                </div>
+
+                <!-- Playback Toolbar -->
+                <div class="playback-controls card">
+                    <div class="btn-group">
+                        <button class="btn btn-icon" id="btn-first" title="First Cycle">⏮️</button>
+                        <button class="btn btn-icon" id="btn-prev" title="Previous Cycle">◀️</button>
+                        <button class="btn btn-primary" id="btn-play" title="Play/Pause Simulation">▶️ Play</button>
+                        <button class="btn btn-icon" id="btn-next" title="Next Cycle">▶️</button>
+                        <button class="btn btn-icon" id="btn-last" title="Last Cycle">⏭️</button>
+                    </div>
+                    <div class="playback-meta">
+                        <span class="cycle-counter">Cycle <strong id="cycle-num">1</strong> / <span id="total-cycles">6</span></span>
+                        <span class="time-stamp">Time: <strong id="cycle-time">0.0</strong> ns</span>
+                    </div>
+                    <div class="speed-selector">
+                        <label for="playback-speed">Speed:</label>
+                        <select id="playback-speed" class="select-input">
+                            <option value="1500">Slow (1.5s)</option>
+                            <option value="800" selected>Normal (0.8s)</option>
+                            <option value="300">Fast (0.3s)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Test Case Quick Selector -->
+                <div class="testcases-card card">
+                    <h3>Preset Simulation Test Cases</h3>
+                    <div class="testcase-list" id="testcase-list">
+                        <button class="testcase-item active" data-cycle="1">
+                            <span class="tc-badge hit">HIT</span>
+                            <div class="tc-info">
+                                <span class="tc-title">TC1: Search 0xA5A5</span>
+                                <span class="tc-desc">Exact Match at Address 0</span>
+                            </div>
+                        </button>
+                        <button class="testcase-item" data-cycle="3">
+                            <span class="tc-badge miss">HIGH MISS</span>
+                            <div class="tc-info">
+                                <span class="tc-title">TC2: Search 0x5A5A</span>
+                                <span class="tc-desc">139 Bit Mismatches (High Power)</span>
+                            </div>
+                        </button>
+                        <button class="testcase-item" data-cycle="4">
+                            <span class="tc-badge write">WRITE</span>
+                            <div class="tc-info">
+                                <span class="tc-title">TC3: Write 0xDEAD</span>
+                                <span class="tc-desc">Write to CAM Entry 5</span>
+                            </div>
+                        </button>
+                        <button class="testcase-item" data-cycle="5">
+                            <span class="tc-badge hit">HIT</span>
+                            <div class="tc-info">
+                                <span class="tc-title">TC4: Search 0xDEAD</span>
+                                <span class="tc-desc">Exact Match at Address 5</span>
+                            </div>
+                        </button>
+                        <button class="testcase-item" data-cycle="6">
+                            <span class="tc-badge miss">LOW MISS</span>
+                            <div class="tc-info">
+                                <span class="tc-title">TC5: Search 0xA5A4</span>
+                                <span class="tc-desc">26 Bit Mismatches (Low Power)</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interactive Custom Query Box -->
+                <div class="custom-query-card card">
+                    <h3>Interactive Search / Write Command</h3>
+                    <div class="query-form">
+                        <div class="form-group">
+                            <label for="op-mode">Operation Mode:</label>
+                            <select id="op-mode" class="select-input">
+                                <option value="SEARCH">Parallel Search Operation</option>
+                                <option value="WRITE">CAM Memory Write</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="group-search-pattern">
+                            <label for="input-pattern">16-Bit Pattern (Hex):</label>
+                            <div class="input-with-prefix">
+                                <span class="prefix">0x</span>
+                                <input type="text" id="input-pattern" class="text-input" value="A5A5" maxlength="4">
+                            </div>
+                        </div>
+
+                        <div class="form-group hidden" id="group-write-addr">
+                            <label for="input-write-addr">Target Entry (0-9):</label>
+                            <input type="number" id="input-write-addr" class="text-input" value="5" min="0" max="9">
+                        </div>
+
+                        <div class="form-group hidden" id="group-write-data">
+                            <label for="input-write-data">Write Data (Hex):</label>
+                            <div class="input-with-prefix">
+                                <span class="prefix">0x</span>
+                                <input type="text" id="input-write-data" class="text-input" value="DEAD" maxlength="4">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-accent btn-block" id="btn-execute-query">
+                            ⚡ Evaluate in SystemC Backend
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Power & Energy Metrics -->
+                <div class="metrics-card card">
+                    <h3>Instant Power & Energy Gauges</h3>
+                    <div class="power-meter-container">
+                        <div class="gauge-display">
+                            <div class="gauge-value" id="gauge-power-value">0.317</div>
+                            <div class="gauge-unit">mW</div>
+                        </div>
+                        <div class="power-bar-wrapper">
+                            <div class="power-bar-fill" id="power-bar-fill" style="width: 15%;"></div>
+                        </div>
+                        <div class="power-breakdown">
+                            <div class="p-item">
+                                <span class="p-label">Static Leakage:</span>
+                                <span class="p-val" id="val-p-leakage">0.002 mW</span>
+                            </div>
+                            <div class="p-item">
+                                <span class="p-label">Dynamic Mismatch:</span>
+                                <span class="p-val" id="val-p-dynamic">0.315 mW</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-label">Accumulated Energy</span>
+                            <span class="stat-value" id="stat-energy">4.135e-05 mJ</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Bit Mismatches</span>
+                            <span class="stat-value highlight" id="stat-mismatches">21 bits</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Match Result</span>
+                            <span class="stat-value badge-hit" id="stat-result">HIT @ Entry 0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Visual Memory Grid, Waveform & SystemC Trace -->
+            <section class="panel visualization-panel">
+                <!-- Search Query Pattern Banner -->
+                <div class="search-banner card">
+                    <div class="banner-title">
+                        <span>Current Cycle Operation:</span>
+                        <strong id="banner-op-type" class="badge-op search">SEARCH</strong>
+                    </div>
+                    <div class="pattern-display">
+                        <span class="pattern-label">Search Query Word:</span>
+                        <code class="hex-val" id="banner-hex">0xA5A5</code>
+                        <div class="bin-array" id="banner-bin-array">
+                            <!-- 16 bit chips populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 10x16 CAM Memory Bit Matrix Visualization -->
+                <div class="cam-matrix-card card">
+                    <div class="matrix-header">
+                        <h3>10 × 16 Content Addressable Memory (CAM) Array</h3>
+                        <div class="matrix-legend">
+                            <span class="legend-item match"><span class="swatch"></span> Matching Bit (XOR = 0)</span>
+                            <span class="legend-item mismatch"><span class="swatch"></span> Mismatched Bit (XOR = 1)</span>
+                            <span class="legend-item hit-line"><span class="swatch"></span> Match Line HIT</span>
+                        </div>
+                    </div>
+
+                    <!-- Memory Grid Container -->
+                    <div class="cam-grid" id="cam-grid">
+                        <!-- Populated dynamically by app.js -->
+                    </div>
+                </div>
+
+                <!-- Digital Waveform & Timing Diagram (VCD Viewer) -->
+                <div class="waveform-card card">
+                    <div class="waveform-header">
+                        <h3>Digital Signal Waveform (VCD Trace Timeline)</h3>
+                        <span class="trace-file-info">cam_trace.vcd | Clock: 100 MHz (10 ns)</span>
+                    </div>
+                    <div class="waveform-canvas-wrapper">
+                        <canvas id="waveform-canvas" height="180"></canvas>
+                    </div>
+                </div>
+
+                <!-- Live SystemC C++ Console Log Stream -->
+                <div class="console-card card">
+                    <div class="console-header">
+                        <h3>SystemC C++ Console Trace Stream</h3>
+                        <button class="btn-text" id="btn-copy-log">Copy Log</button>
+                    </div>
+                    <div class="console-output" id="console-output">
+                        <div class="log-line info">[SystemC 3.0.2] Kernel Initialized.</div>
+                        <div class="log-line info">Tracing timescale unit set: 1 ns (cam_trace.vcd)</div>
+                        <div class="log-line success">SYSTEMC CAM POWER MODEL - SIMULATION STARTED</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>ESL SystemC CAM Power Estimation Architecture &bull; System on Chip (SoC) Design &bull; IEEE Power Model</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
