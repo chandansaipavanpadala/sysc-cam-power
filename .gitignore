@@ -1,0 +1,55 @@
+# ==============================================================================
+# Git Ignore Configuration for SystemC CAM Power Model Repository
+# ==============================================================================
+
+# LaTeX Temporary Compilation Artifacts in Documentation/
+Documentation/*.aux
+Documentation/*.log
+Documentation/*.out
+Documentation/*.toc
+Documentation/*.lof
+Documentation/*.lot
+Documentation/*.synctex.gz
+Documentation/*.fls
+Documentation/*.fdb_latexmk
+Documentation/*.bbl
+Documentation/*.blg
+Documentation/*.listing
+Documentation/*.nav
+Documentation/*.snm
+Documentation/*.vrb
+Documentation/*.dvi
+Documentation/*.run.xml
+Documentation/*.bcf
+
+# Explicitly Keep Documentation Source Code and Final PDF
+!Documentation/*.tex
+!Documentation/*.pdf
+!Documentation/*.bat
+!Documentation/*.md
+
+# Build Artifacts and Binary Executables
+Backend/*.o
+Backend/*.obj
+Backend/*.exe
+Backend/build/
+build/
+.cache/
+
+# Trace and Dataset Artifacts
+Backend/cam_trace.vcd
+cam_trace.vcd
+
+# Node Modules & Logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and Editor Artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
