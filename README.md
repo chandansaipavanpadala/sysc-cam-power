@@ -159,8 +159,12 @@ sysc-cam-power/
 ├── Frontend/
 │   ├── index.html                # Visual Workbench Dashboard HTML Structure
 │   ├── style.css                 # Dark EDA Glassmorphic Styling System
-│   ├── app.js                    # UI Interactivity, Matrix & Waveform Canvas Plotter
+│   ├── app.js                    # UI Interactivity, Hardware Matrix & Playback Engine
 │   └── server.js                 # Node.js HTTP Server & SystemC Execution Gateway
+│
+├── Screenshots/
+│   ├── backend.png               # SystemC C++ Simulation Execution Terminal Capture
+│   └── frontend.png              # EDA Web Visual Workbench Dashboard Interface Capture
 │
 ├── run_web.bat                   # Top-Level One-Click Launch Script
 ├── LICENSE                       # Project License File
@@ -214,17 +218,18 @@ SC_MODULE(CAM_Power_Model) {
 
 ### 1. Dashboard Layout (`index.html`)
 Presents a multi-column EDA dashboard containing:
-- **Simulation Control Panel**: First, Previous, Play/Pause, Next, Last playback buttons, speed selection, and preset testcase shortcuts.
-- **Custom Query Form**: Interactive form allowing users to select operation mode (Search or Write), type hex patterns (e.g. `0xA5A5` or `0xDEAD`), and execute queries live against the SystemC backend.
-- **Instant Power Meter**: Digital dynamic gauge, power bar, static leakage vs dynamic power breakdown, and energy counters.
-- **10 x 16 CAM Grid**: Visual memory array displaying every bit in binary format with color-coded match/mismatch status and line state indicators.
-- **Digital Signal Waveform Canvas**: HTML5 Canvas rendering digital signal transitions (`clk`, `write_en`, `match_found`, `power_mw`).
-- **Console Stream**: Real-time SystemC log output stream.
+- **Navigation & Scenario Selector**: Segmented toolbar with preset testcase shortcuts (TC1 through TC5), live SystemC kernel activity indicators, and clock frequency display (100 MHz, Tclk = 10 ns).
+- **Simulation Control Panel**: First, Previous, Play/Pause, Next, Last playback buttons, speed selection, and cycle counter.
+- **ESL Power & Energy Engine**: Radial SVG power arc gauge displaying instantaneous power (mW) and cumulative energy (microjoules), paired with a static base leakage vs dynamic mismatch dissipation breakdown bar.
+- **10 x 16 CAM Array Matrix**: Visual hardware array displaying 160 flip-flop storage cells with bitwise XOR evaluation, stored hex representations, bit mismatch counts, and capacitive match-line status badges.
+- **Live Command Generator**: Parameterized input panel allowing engineers to select operation mode (Search or Write), input 16-bit hex patterns (e.g., 0xA5A5, 0xDEAD), and execute simulations live against the SystemC backend.
+- **Kernel Telemetry Console**: Real-time SystemC trace stream with formatted timestamped logs, clipboard copy, and buffer reset controls.
 
 ### 2. Interactivity & Visualization Engine (`app.js`)
-- Reads and parses `simulation_data.json`.
-- Dynamically updates memory row DOM elements, bitwise match highlighting (Emerald `#10b981` for match, Rose `#ef4444` for mismatch, Cyan `#06b6d4` for HIT match line).
-- Renders signal traces dynamically on an HTML5 canvas synchronized with the current simulation cycle cursor.
+- Reads and parses `simulation_data.json` exported by the SystemC backend.
+- Dynamically updates memory row DOM elements, bitwise match highlighting (Emerald `#10b981` for match, Crimson `#f43f5e` for mismatch, Cyan `#06b6d4` for prioritized HIT match line).
+- Synchronizes instantaneous power calculations, cumulative energy metrics, and simulation playback states.
+- Hardens hex input validation against malformed strings, stripping prefixes and clamping to 16-bit range.
 
 ### 3. Server Bridge Gateway (`server.js`)
 A Node.js HTTP server configured to:
@@ -309,6 +314,12 @@ The testbench (`main.cpp`) executes 5 verification scenarios:
 ### Sample Terminal Simulation Report Output
 
 ```text
+SystemC 3.0.2-Accellera --- Aug  1 2026 08:17:32
+Copyright (c) 1996-2025 by all Contributors,
+ALL RIGHTS RESERVED
+
+Info: (I703) tracing timescale unit set: 1 ns (cam_trace.vcd)
+
 ========================================================
      SYSTEMC CAM POWER MODEL - SIMULATION STARTED        
 ========================================================
@@ -333,11 +344,11 @@ The testbench (`main.cpp`) executes 5 verification scenarios:
 ========================================================
   CAM Depth             : 10 entries
   CAM Bit Width         : 16 bits
-  Total Search Cycles   : 5
-  Total Hits            : 3
+  Total Search Cycles   : 4
+  Total Hits            : 2
   Total Misses          : 2
-  Hit Rate              : 60 %
-  Accumulated Energy    : 4.135e-05 mJ
+  Hit Rate              : 50 %
+  Accumulated Energy    : 3.818e-05 mJ
 ========================================================
 
 [JSON EXPORT] Simulation trace data saved to 'simulation_data.json'
@@ -345,6 +356,71 @@ The testbench (`main.cpp`) executes 5 verification scenarios:
 
 --- Simulation Finished Successfully ---
 ```
+
+---
+
+## Visual Demonstration and Experimental Analysis
+
+This section presents the empirical validation of the Electronic System-Level (ESL) Content Addressable Memory (CAM) framework across both native simulation runtime and interactive graphical synthesis.
+
+### Figure 1: SystemC C++ Simulation Engine Execution Trace
+
+![SystemC C++ Simulation Execution Terminal](Screenshots/backend.png)
+
+#### Architectural Analysis of Backend Terminal Output
+
+Figure 1 captures the complete standalone console execution of the compiled native SystemC IEEE 1666 binary executable (`sim.exe`). The output validates functional correctness, timing synchronization, and algorithmic power modeling across five distinct operating phases:
+
+1. **Kernel Bootstrapping and Timescale Configuration:**
+   * The Accellera SystemC 3.0.2 proof-of-concept simulation kernel initializes successfully under Windows/MinGW.
+   * Standardized Value Change Dump (VCD) trace pointer creation assigns a $1 \text{ ns}$ timing resolution for hardware signal tracing (`cam_trace.vcd`).
+   * The CAM memory array initializes with baseline sequential words ranging from `0xA5A5` (Entry 0) through `0xA5AE` (Entry 9).
+
+2. **Cycle-by-Cycle Verification Diagnostics:**
+   * **Test Case 1 ($t = 0 \text{ s}$):** Search word `0xA5A5` targets entry 0. The internal priority encoder flags `Result: HIT` at `Addr: 0`. The remaining nine un-matched rows accumulate 21 total bit mismatches, yielding an instantaneous power calculation of $P = 0.002 + 21 \times 0.015 = 0.317 \text{ mW}$.
+   * **Test Case 2 ($t = 10 \text{ ns}$):** Search pattern `0x5A5A` evaluates against all ten stored words without finding a match (`Result: MISS`, `Addr: -1`). A cumulative sum of 139 bit mismatches across the array discharges all ten capacitive match-lines, generating the peak dynamic switching dissipation of $P = 0.002 + 139 \times 0.015 = 2.087 \text{ mW}$.
+   * **Test Case 3 ($t = 20 \text{ ns}$):** Write enable control is asserted (`write_en = true`), executing a synchronous write of `0xDEAD` into CAM Entry 5. Match-line sensing is bypassed during write cycles, reducing power strictly to the static baseline leakage floor of $0.002 \text{ mW}$ ($2 \ \mu\text{W}$).
+   * **Test Case 4 ($t = 30 \text{ ns}$):** Re-search of query `0xDEAD` validates that the in-situ memory update succeeded. The priority logic registers a verified `Result: HIT` at `Addr: 5`. The 68 bit differences across non-matching lines dissipate $P = 0.002 + 68 \times 0.015 = 1.022 \text{ mW}$.
+   * **Test Case 5 ($t = 40 \text{ ns}$):** Single-bit deviation vector `0xA5A4` (differing by exactly one bit from Entry 0) fails to match (`Result: MISS`, `Addr: -1`). The system registers 26 total bit mismatches, resulting in a low-power miss dissipation of $0.392 \text{ mW}$.
+
+3. **Cumulative Statistical Estimation Report:**
+   * **Array Dimensions:** 10 words deep $\times$ 16 bits wide ($160$ dual-rail comparator cells).
+   * **Operational Profile:** 4 search cycles, 1 memory write cycle.
+   * **Hit Rate Efficiency:** 2 hits out of 4 searches ($50.0\%$ empirical hit rate).
+   * **Accumulated Energy Consumption:** Total accumulated energy across all cycles equals $3.818 \times 10^{-5} \text{ mJ}$ ($38.18 \text{ nJ}$).
+
+4. **Structured Multi-Format Artifact Generation:**
+   * Structured JSON telemetry is serialized into `simulation_data.json` for consumption by the web visual workbench.
+   * Hardware signal transitions are committed into `cam_trace.vcd` for post-simulation waveform visualization in logic analyzer tools.
+
+---
+
+### Figure 2: Electronic Design Automation (EDA) Web Visual Workbench
+
+![Electronic Design Automation Web Workbench](Screenshots/frontend.png)
+
+#### Architectural Analysis of Frontend Dashboard Interface
+
+Figure 2 showcases the dark-mode Electronic Design Automation (EDA) visual dashboard operating at `http://localhost:3000`. The interface synthesizes hardware memory states, power calculations, and execution telemetry into an integrated supervisory display:
+
+1. **Preset Verification Scenario Navigation Toolbar:**
+   * Positioned along the top panel, segmented pill selectors provide one-click traversal across the five predefined test scenarios (TC1 through TC5).
+   * Test Case 5 (`TC5: 0xA5A4`) is captured in the active state, synchronously locking the cycle stepper to cycle 5 ($t = 40.0 \text{ ns}$) and updating all analytical panels.
+
+2. **Electronic System-Level (ESL) Power and Energy Engine:**
+   * **Radial Power Arc Meter:** High-precision SVG circular gauge rendering instantaneous power ($0.392 \text{ mW}$) in bold typography with total accumulated energy ($0.038 \ \mu\text{J}$) displayed beneath.
+   * **Dissipation Breakdown Bar:** A segmented horizontal meter decomposes instantaneous power into its two constitutive components: Static Base Leakage ($0.002 \text{ mW}$, amber) and Dynamic Switching Mismatch ($0.390 \text{ mW}$, emerald).
+   * **Hardware Telemetry Readouts:** Dedicated cards display the evaluated match state (`MISS (No Match)`) and the cumulative Hamming distance across all array entries ($26 \text{ bits}$).
+
+3. **10-Entry by 16-Bit CAM Hardware Array Matrix:**
+   * **16-Bit Broadcast Vector Banner:** The upper header displays query word `0xA5A4` alongside its full 16-bit binary decomposition (`1 0 1 0 0 1 0 1 1 0 1 0 0 1 0 0`).
+   * **Bitwise Comparator Matrix:** All 160 memory cells are rendered individually with clear visual distinction. Emerald cells denote bit matches (XOR = 0), while crimson cells highlight bit mismatches (XOR = 1).
+   * **Row-Level Analytical Columns:** For each entry (Row 0 through Row 9), the table displays stored hexadecimal contents, exact bit difference count, and capacitive match-line status (`DISCHARGED` across all rows due to the absence of a complete match).
+   * **In-Situ Write Persistence:** Row 5 visually demonstrates the memory write completed in Cycle 3, storing `0xDEAD` with 8 bit differences relative to query `0xA5A4`.
+
+4. **Live Command Generator & Kernel Telemetry Trace:**
+   * **Command Generator Panel:** Enables interactive specification of arbitrary 16-bit query patterns and write vectors for immediate execution in the SystemC kernel via asynchronous REST API calls.
+   * **Real-Time Simulation Kernel Trace:** A terminal-style console panel streams timestamped log lines directly from the backend simulation engine, providing verification engineers with immediate visibility into internal address resolution, mismatch distributions, and power metrics.
 
 ---
 

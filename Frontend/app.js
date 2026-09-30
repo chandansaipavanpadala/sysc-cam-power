@@ -1,6 +1,16 @@
 /**
- * SystemC CAM Power Model - EDA Web Frontend Interactive Controller
+ * CAM-PET // ESL Workbench - Interactive Frontend Controller
+ * SystemC 10x16 CAM Power Estimation & Verification EDA Dashboard
  */
+
+// Canonical Test Case Definitions
+const PRESET_TEST_CASES = [
+    { id: 'TC1', name: 'TC1: 0xA5A5', op: 'SEARCH', pattern: 0xA5A5, desc: 'Exact Match @ Row 0 &bull; 0.317 mW' },
+    { id: 'TC2', name: 'TC2: 0x5A5A', op: 'SEARCH', pattern: 0x5A5A, desc: '139b Miss &bull; 2.087 mW' },
+    { id: 'TC3', name: 'TC3: Write 0xDEAD', op: 'WRITE', writeAddr: 5, writeData: 0xDEAD, desc: 'Row 5 &bull; 0.002 mW' },
+    { id: 'TC4', name: 'TC4: 0xDEAD', op: 'SEARCH', pattern: 0xDEAD, desc: 'Hit @ Row 5 &bull; 1.022 mW' },
+    { id: 'TC5', name: 'TC5: 0xA5A4', op: 'SEARCH', pattern: 0xA5A4, desc: '26b Miss &bull; 0.392 mW' }
+];
 
 // Application State
 const state = {
@@ -9,81 +19,105 @@ const state = {
     isPlaying: false,
     timer: null,
     playbackSpeed: 800,
-    opMode: 'SEARCH',
+    opMode: 'SEARCH'
 };
 
-// DOM Element Selectors
-const elements = {
-    cycleNum: document.getElementById('cycle-num'),
-    totalCycles: document.getElementById('total-cycles'),
-    cycleTime: document.getElementById('cycle-time'),
-    btnFirst: document.getElementById('btn-first'),
-    btnPrev: document.getElementById('btn-prev'),
-    btnPlay: document.getElementById('btn-play'),
-    btnNext: document.getElementById('btn-next'),
-    btnLast: document.getElementById('btn-last'),
-    playbackSpeed: document.getElementById('playback-speed'),
-    testcaseList: document.getElementById('testcase-list'),
-    
-    // Custom Form Controls
-    opMode: document.getElementById('op-mode'),
-    groupSearchPattern: document.getElementById('group-search-pattern'),
-    groupWriteAddr: document.getElementById('group-write-addr'),
-    groupWriteData: document.getElementById('group-write-data'),
-    inputPattern: document.getElementById('input-pattern'),
-    inputWriteAddr: document.getElementById('input-write-addr'),
-    inputWriteData: document.getElementById('input-write-data'),
-    btnExecuteQuery: document.getElementById('btn-execute-query'),
-    btnRecompile: document.getElementById('btn-recompile'),
-    systemStatus: document.getElementById('system-status'),
-    statusText: document.getElementById('status-text'),
-    
-    // Gauges & Metrics
-    gaugePowerValue: document.getElementById('gauge-power-value'),
-    powerBarFill: document.getElementById('power-bar-fill'),
-    valPLeakage: document.getElementById('val-p-leakage'),
-    valPDynamic: document.getElementById('val-p-dynamic'),
-    statEnergy: document.getElementById('stat-energy'),
-    statMismatches: document.getElementById('stat-mismatches'),
-    statResult: document.getElementById('stat-result'),
-    
-    // Banner & Matrix
-    bannerOpType: document.getElementById('banner-op-type'),
-    bannerHex: document.getElementById('banner-hex'),
-    bannerBinArray: document.getElementById('banner-bin-array'),
-    camGrid: document.getElementById('cam-grid'),
-    
-    // Waveform & Console
-    waveformCanvas: document.getElementById('waveform-canvas'),
-    consoleOutput: document.getElementById('console-output'),
-    btnCopyLog: document.getElementById('btn-copy-log')
-};
+// DOM Element Cache
+let dom = {};
 
 // Helper: Convert number to 16-bit binary string
 function toBin16(num) {
-    return (num >>> 0).toString(2).padStart(16, '0');
+    return (Number(num) >>> 0).toString(2).padStart(16, '0');
 }
 
 // Helper: Convert number to 4-digit Hex string
 function toHex4(num) {
-    return '0x' + (num >>> 0).toString(16).toUpperCase().padStart(4, '0');
+    return '0x' + (Number(num) >>> 0).toString(16).toUpperCase().padStart(4, '0');
 }
 
-// Initialize Application
+// Clean Hex Parsing without throwing NaN
+function parseHexSafe(str, defaultVal = 0) {
+    if (typeof str === 'number') return str & 0xFFFF;
+    if (!str) return defaultVal;
+    const clean = str.trim().replace(/^0x/i, '');
+    const val = parseInt(clean, 16);
+    return isNaN(val) ? defaultVal : (val & 0xFFFF);
+}
+
+// Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
+    cacheDomElements();
     setupEventListeners();
+    setupKeyboardShortcuts();
     loadSimulationData();
 });
 
-// Setup UI Event Listeners
+function cacheDomElements() {
+    dom = {
+        cycleNum: document.getElementById('cycle-num'),
+        totalCycles: document.getElementById('total-cycles'),
+        cycleTime: document.getElementById('cycle-time'),
+        btnFirst: document.getElementById('btn-first'),
+        btnPrev: document.getElementById('btn-prev'),
+        btnPlay: document.getElementById('btn-play'),
+        btnNext: document.getElementById('btn-next'),
+        btnLast: document.getElementById('btn-last'),
+        playbackSpeed: document.getElementById('playback-speed'),
+        testcaseList: document.getElementById('testcase-list'),
+        
+        // Navigation & Status
+        systemStatus: document.getElementById('system-status'),
+        statusText: document.getElementById('status-text'),
+        btnRecompile: document.getElementById('btn-recompile'),
+        btnReset: document.getElementById('btn-reset'),
+
+        // Radial Gauge & Power Breakdown
+        gaugeArc: document.getElementById('gauge-arc'),
+        gaugePowerValue: document.getElementById('gauge-power-value'),
+        statEnergy: document.getElementById('stat-energy'),
+        regimeTag: document.getElementById('regime-tag'),
+        breakdownTotal: document.getElementById('breakdown-total'),
+        barLeakage: document.getElementById('bar-leakage'),
+        barDynamic: document.getElementById('bar-dynamic'),
+        valPLeakage: document.getElementById('val-p-leakage'),
+        valPDynamic: document.getElementById('val-p-dynamic'),
+        statResult: document.getElementById('stat-result'),
+        statMismatches: document.getElementById('stat-mismatches'),
+
+        // Command Injection Form
+        modeSearch: document.getElementById('mode-search'),
+        modeWrite: document.getElementById('mode-write'),
+        groupSearchPattern: document.getElementById('group-search-pattern'),
+        groupWriteControls: document.getElementById('group-write-controls'),
+        inputPattern: document.getElementById('input-pattern'),
+        inputWriteAddr: document.getElementById('input-write-addr'),
+        inputWriteData: document.getElementById('input-write-data'),
+        patternValidity: document.getElementById('pattern-validity'),
+        btnExecuteQuery: document.getElementById('btn-execute-query'),
+
+        // Banner & CAM Grid
+        bannerOpType: document.getElementById('banner-op-type'),
+        bannerHex: document.getElementById('banner-hex'),
+        bannerBinArray: document.getElementById('banner-bin-array'),
+        camGrid: document.getElementById('cam-grid'),
+
+        // Telemetry Console
+        consoleOutput: document.getElementById('console-output'),
+        btnCopyLog: document.getElementById('btn-copy-log'),
+        btnClearLog: document.getElementById('btn-clear-log')
+    };
+}
+
+// Setup Event Handlers
 function setupEventListeners() {
-    elements.btnFirst.addEventListener('click', () => jumpToCycle(0));
-    elements.btnPrev.addEventListener('click', () => jumpToCycle(state.currentCycleIndex - 1));
-    elements.btnNext.addEventListener('click', () => jumpToCycle(state.currentCycleIndex + 1));
-    elements.btnLast.addEventListener('click', () => jumpToCycle((state.simulationData?.cycles?.length || 1) - 1));
-    elements.btnPlay.addEventListener('click', togglePlayPause);
-    
-    elements.playbackSpeed.addEventListener('change', (e) => {
+    // Stepper Controls
+    dom.btnFirst.addEventListener('click', () => jumpToCycle(0));
+    dom.btnPrev.addEventListener('click', () => jumpToCycle(state.currentCycleIndex - 1));
+    dom.btnNext.addEventListener('click', () => jumpToCycle(state.currentCycleIndex + 1));
+    dom.btnLast.addEventListener('click', () => jumpToCycle((state.simulationData?.cycles?.length || 1) - 1));
+    dom.btnPlay.addEventListener('click', togglePlayPause);
+
+    dom.playbackSpeed.addEventListener('change', (e) => {
         state.playbackSpeed = parseInt(e.target.value, 10);
         if (state.isPlaying) {
             pauseSimulation();
@@ -91,59 +125,134 @@ function setupEventListeners() {
         }
     });
 
-    elements.opMode.addEventListener('change', (e) => {
-        state.opMode = e.target.value;
-        if (state.opMode === 'SEARCH') {
-            elements.groupSearchPattern.classList.remove('hidden');
-            elements.groupWriteAddr.classList.add('hidden');
-            elements.groupWriteData.classList.add('hidden');
-        } else {
-            elements.groupSearchPattern.classList.add('hidden');
-            elements.groupWriteAddr.classList.remove('hidden');
-            elements.groupWriteData.classList.remove('hidden');
-        }
-    });
-
-    // Testcase Quick Buttons
-    elements.testcaseList.querySelectorAll('.testcase-item').forEach(btn => {
+    // Test Case Quick Buttons
+    dom.testcaseList.querySelectorAll('.tc-pill').forEach(btn => {
         btn.addEventListener('click', () => {
-            const targetCycle = parseInt(btn.getAttribute('data-cycle'), 10) - 1;
-            jumpToCycle(targetCycle);
-            
-            elements.testcaseList.querySelectorAll('.testcase-item').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            const tcIndex = parseInt(btn.getAttribute('data-tc-index'), 10);
+            jumpToTestCase(tcIndex);
         });
     });
 
-    // Custom Execution Trigger
-    elements.btnExecuteQuery.addEventListener('click', executeCustomQuery);
-    elements.btnRecompile.addEventListener('click', executeSystemCBackend);
-    
-    elements.btnCopyLog.addEventListener('click', () => {
-        const text = elements.consoleOutput.innerText;
-        navigator.clipboard.writeText(text);
-        alert('Console trace log copied to clipboard!');
+    // Segmented Mode Switch
+    dom.modeSearch.addEventListener('click', () => setOperationMode('SEARCH'));
+    dom.modeWrite.addEventListener('click', () => setOperationMode('WRITE'));
+
+    // Input Validation Feedback
+    dom.inputPattern.addEventListener('input', () => {
+        const val = dom.inputPattern.value.trim().replace(/^0x/i, '');
+        const isValid = /^[0-9A-Fa-f]{1,4}$/.test(val);
+        dom.patternValidity.textContent = isValid ? '16-bit' : 'Invalid';
+        dom.patternValidity.style.color = isValid ? 'var(--emerald-hit)' : 'var(--rose-miss)';
+    });
+
+    // Command Triggers
+    dom.btnExecuteQuery.addEventListener('click', executeCustomQuery);
+    dom.btnRecompile.addEventListener('click', executeSystemCBackend);
+    dom.btnReset.addEventListener('click', resetToBaseline);
+
+    // Console Actions
+    dom.btnCopyLog.addEventListener('click', () => {
+        const text = dom.consoleOutput.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            logConsole('Console log copied to clipboard', 'info');
+        });
+    });
+
+    dom.btnClearLog.addEventListener('click', () => {
+        dom.consoleOutput.innerHTML = '';
+        logConsole('Console buffer cleared', 'info');
+    });
+
+
+}
+
+// Global Keyboard Navigation
+function setupKeyboardShortcuts() {
+    window.addEventListener('keydown', (e) => {
+        // Ignore if user is currently typing in input fields
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                executeCustomQuery();
+            }
+            return;
+        }
+
+        switch (e.key) {
+            case ' ':
+                e.preventDefault();
+                togglePlayPause();
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                jumpToCycle(state.currentCycleIndex - 1);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                jumpToCycle(state.currentCycleIndex + 1);
+                break;
+            case 'Home':
+                e.preventDefault();
+                jumpToCycle(0);
+                break;
+            case 'End':
+                e.preventDefault();
+                jumpToCycle((state.simulationData?.cycles?.length || 1) - 1);
+                break;
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+                e.preventDefault();
+                jumpToTestCase(parseInt(e.key, 10) - 1);
+                break;
+        }
     });
 }
 
-// Fetch Simulation Trace JSON
-async function loadSimulationData() {
-    try {
-        const response = await fetch('simulation_data.json?t=' + Date.now());
-        if (!response.ok) throw new Error('Failed to load JSON');
-        state.simulationData = await response.json();
-        
-        elements.totalCycles.textContent = state.simulationData.cycles.length;
-        renderCycle(0);
-        logConsole('Loaded SystemC simulation dataset (' + state.simulationData.cycles.length + ' cycles recorded)', 'success');
-    } catch (err) {
-        logConsole('Notice: Loading default inline simulation profile', 'info');
-        loadFallbackData();
+function setOperationMode(mode) {
+    state.opMode = mode;
+    if (mode === 'SEARCH') {
+        dom.modeSearch.classList.add('active');
+        dom.modeWrite.classList.remove('active');
+        dom.groupSearchPattern.classList.remove('hidden');
+        dom.groupWriteControls.classList.add('hidden');
+    } else {
+        dom.modeWrite.classList.add('active');
+        dom.modeSearch.classList.remove('active');
+        dom.groupSearchPattern.classList.add('hidden');
+        dom.groupWriteControls.classList.remove('hidden');
     }
 }
 
-// Fallback Dataset in case JSON file is missing
-function loadFallbackData() {
+// Load Simulation Dataset from Backend
+async function loadSimulationData() {
+    dom.statusText.textContent = 'Loading Dataset...';
+    try {
+        const res = await fetch('/simulation_data.json?t=' + Date.now());
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        
+        if (!data || !Array.isArray(data.cycles) || data.cycles.length === 0) {
+            throw new Error('Invalid JSON structure');
+        }
+
+        state.simulationData = data;
+        dom.totalCycles.textContent = data.cycles.length;
+        dom.statusText.textContent = 'SystemC Kernel Active';
+        dom.systemStatus.className = 'engine-badge live';
+        
+        renderCycle(0);
+        logConsole(`[DATASET] Loaded ${data.cycles.length} cycles from SystemC simulation trace`, 'success');
+    } catch (err) {
+        console.warn('Falling back to built-in simulation dataset:', err);
+        loadFallbackDataset();
+    }
+}
+
+// Fallback Dataset for Standalone Testing
+function loadFallbackDataset() {
     state.simulationData = {
         cam_depth: 10,
         cam_width: 16,
@@ -174,7 +283,7 @@ function loadFallbackData() {
                 hit_addr: -1,
                 total_mismatches: 139,
                 power_mw: 2.087,
-                accumulated_energy_mj: 0.00002721,
+                accumulated_energy_mj: 0.00002404,
                 cam_snapshot: [42405, 42406, 42407, 42408, 42409, 42410, 42411, 42412, 42413, 42414],
                 line_mismatches: [16, 14, 15, 13, 14, 12, 13, 14, 15, 13]
             },
@@ -190,7 +299,7 @@ function loadFallbackData() {
                 hit_addr: -1,
                 total_mismatches: 0,
                 power_mw: 0.002,
-                accumulated_energy_mj: 0.00002721,
+                accumulated_energy_mj: 0.00002404,
                 cam_snapshot: [42405, 42406, 42407, 42408, 42409, 57005, 42411, 42412, 42413, 42414],
                 line_mismatches: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             },
@@ -204,7 +313,7 @@ function loadFallbackData() {
                 hit_addr: 5,
                 total_mismatches: 68,
                 power_mw: 1.022,
-                accumulated_energy_mj: 0.00003743,
+                accumulated_energy_mj: 0.00003426,
                 cam_snapshot: [42405, 42406, 42407, 42408, 42409, 57005, 42411, 42412, 42413, 42414],
                 line_mismatches: [7, 9, 8, 8, 7, 0, 8, 7, 6, 8]
             },
@@ -218,241 +327,323 @@ function loadFallbackData() {
                 hit_addr: -1,
                 total_mismatches: 26,
                 power_mw: 0.392,
-                accumulated_energy_mj: 0.00004135,
+                accumulated_energy_mj: 0.00003818,
                 cam_snapshot: [42405, 42406, 42407, 42408, 42409, 57005, 42411, 42412, 42413, 42414],
                 line_mismatches: [1, 1, 2, 2, 3, 8, 4, 1, 2, 2]
             }
         ]
     };
-    elements.totalCycles.textContent = state.simulationData.cycles.length;
+    dom.totalCycles.textContent = state.simulationData.cycles.length;
+    dom.statusText.textContent = 'Standalone Client Active';
+    dom.systemStatus.className = 'engine-badge';
     renderCycle(0);
+    logConsole('[STANDALONE] Loaded baseline 5-cycle verification profile', 'info');
 }
 
-// Render Specific Cycle Data
+// Jump to Specific Preset Test Case (Fix for Test Case Button Bug)
+function jumpToTestCase(tcIndex) {
+    if (!state.simulationData || !Array.isArray(state.simulationData.cycles)) return;
+    const tc = PRESET_TEST_CASES[tcIndex];
+    if (!tc) return;
+
+    const cycles = state.simulationData.cycles;
+    let targetIndex = -1;
+
+    // Smart Matching by Operation & Pattern
+    if (tc.op === 'WRITE') {
+        targetIndex = cycles.findIndex(c => c.op_type === 'WRITE' && (c.write_addr === tc.writeAddr || (c.write_data && c.write_data.toLowerCase().includes('dead'))));
+    } else {
+        const hexLow = '0x' + tc.pattern.toString(16).toLowerCase();
+        targetIndex = cycles.findIndex(c => c.op_type === 'SEARCH' && (
+            c.search_pattern_dec === tc.pattern ||
+            (c.search_pattern && c.search_pattern.toLowerCase() === hexLow)
+        ));
+    }
+
+    // Fallback: If not found by pattern match, use direct 0-based array index
+    if (targetIndex === -1) {
+        targetIndex = Math.max(0, Math.min(tcIndex, cycles.length - 1));
+    }
+
+    jumpToCycle(targetIndex);
+}
+
+// Jump to Cycle Index
+function jumpToCycle(idx) {
+    if (!state.simulationData || !Array.isArray(state.simulationData.cycles)) return;
+    const maxIdx = state.simulationData.cycles.length - 1;
+    const target = Math.max(0, Math.min(maxIdx, idx));
+    renderCycle(target);
+}
+
+// Primary Render Engine
 function renderCycle(index) {
     if (!state.simulationData || !state.simulationData.cycles[index]) return;
     state.currentCycleIndex = index;
     const cycle = state.simulationData.cycles[index];
 
-    // Update Header Counter
-    elements.cycleNum.textContent = cycle.cycle;
-    elements.cycleTime.textContent = cycle.time_ns.toFixed(1);
+    // 1. Update Stepper Header
+    dom.cycleNum.textContent = cycle.cycle || (index + 1);
+    dom.totalCycles.textContent = state.simulationData.cycles.length;
+    dom.cycleTime.textContent = Number(cycle.time_ns).toFixed(1);
 
-    // Update Search Query Banner
-    elements.bannerOpType.textContent = cycle.op_type;
-    elements.bannerOpType.className = 'badge-op ' + cycle.op_type.toLowerCase();
-    
-    const searchValDec = cycle.search_pattern_dec || parseInt(cycle.search_pattern, 16);
-    const searchBinStr = toBin16(searchValDec);
-    elements.bannerHex.textContent = '0x' + searchValDec.toString(16).toUpperCase().padStart(4, '0');
+    // 2. Synchronize Test Case Preset Pill Buttons
+    synchronizeActiveTestCase(cycle, index);
 
-    // Render Query Binary Chips
-    elements.bannerBinArray.innerHTML = '';
-    for (let b = 0; b < 16; b++) {
-        const chip = document.createElement('div');
-        chip.className = 'bin-chip';
-        chip.textContent = searchBinStr[b];
-        elements.bannerBinArray.appendChild(chip);
-    }
+    // 3. Update Operation & Query Broadcast Banner
+    renderQueryBanner(cycle);
 
-    // Render Power & Metrics
-    elements.gaugePowerValue.textContent = cycle.power_mw.toFixed(3);
-    const maxPower = 2.5; // mW max scale
-    const barWidthPercent = Math.min(100, Math.max(5, (cycle.power_mw / maxPower) * 100));
-    elements.powerBarFill.style.width = barWidthPercent + '%';
+    // 4. Update Instant Power & Energy Gauges
+    renderPowerGauges(cycle);
 
-    const leakage = state.simulationData.p_leakage_mw || 0.002;
-    const dynamicP = Math.max(0, cycle.power_mw - leakage);
-    elements.valPLeakage.textContent = leakage.toFixed(3) + ' mW';
-    elements.valPDynamic.textContent = dynamicP.toFixed(3) + ' mW';
-    elements.statEnergy.textContent = (cycle.accumulated_energy_mj || 0).toExponential(3) + ' mJ';
-    elements.statMismatches.textContent = cycle.total_mismatches + ' bits';
-
-    if (cycle.op_type === 'WRITE') {
-        elements.statResult.textContent = 'WRITE @ Index ' + cycle.write_addr;
-        elements.statResult.className = 'stat-value';
-        elements.statResult.style.color = 'var(--purple-write)';
-    } else if (cycle.hit) {
-        elements.statResult.textContent = 'HIT @ Index ' + cycle.hit_addr;
-        elements.statResult.className = 'stat-value badge-hit';
-    } else {
-        elements.statResult.textContent = 'MISS (No Match)';
-        elements.statResult.className = 'stat-value badge-miss';
-    }
-
-    // Render 10x16 CAM Matrix Grid
+    // 5. Render 10x16 Interactive CAM Hardware Array
     renderCamGrid(cycle);
 
-    // Draw Waveform Signal Diagram
-    drawWaveformTimeline();
 
-    // Log Console Message
+
+    // 7. Emit Timestamped Log Entry
+    emitConsoleLog(cycle);
+}
+
+// Synchronize Toolbar Active Pill
+function synchronizeActiveTestCase(cycle, index) {
+    const pills = dom.testcaseList.querySelectorAll('.tc-pill');
+    pills.forEach(p => p.classList.remove('active'));
+
+    // Check if current cycle matches any preset test case
+    let activeTc = -1;
     if (cycle.op_type === 'WRITE') {
-        logConsole(`[CAM WRITE] @${cycle.time_ns} ns | Addr: ${cycle.write_addr} | Data: ${cycle.write_data}`, 'info');
+        activeTc = 2; // TC3: Write 0xDEAD
     } else {
-        logConsole(`[CAM SEARCH] @${cycle.time_ns} ns | Pattern: ${cycle.search_pattern} | Result: ${cycle.hit ? 'HIT' : 'MISS'} | Addr: ${cycle.hit_addr} | Bit Mismatches: ${cycle.total_mismatches} | Power: ${cycle.power_mw} mW`, cycle.hit ? 'success' : 'warn');
+        const dec = cycle.search_pattern_dec || parseInt(cycle.search_pattern, 16);
+        if (dec === 0xA5A5) activeTc = 0;       // TC1
+        else if (dec === 0x5A5A) activeTc = 1;  // TC2
+        else if (dec === 0xDEAD) activeTc = 3;  // TC4
+        else if (dec === 0xA5A4) activeTc = 4;  // TC5
+    }
+
+    if (activeTc !== -1 && pills[activeTc]) {
+        pills[activeTc].classList.add('active');
     }
 }
 
-// Render 10x16 CAM Grid Array
+// Render Query Broadcast Banner
+function renderQueryBanner(cycle) {
+    const isWrite = cycle.op_type === 'WRITE';
+    dom.bannerOpType.textContent = isWrite ? 'WRITE OP' : 'SEARCH';
+    dom.bannerOpType.className = 'op-badge ' + (isWrite ? 'write' : 'search');
+
+    const searchVal = cycle.search_pattern_dec || parseInt(cycle.search_pattern, 16) || 0;
+    const writeVal = cycle.write_data ? parseInt(cycle.write_data, 16) : 0;
+    const activeVal = isWrite ? writeVal : searchVal;
+    const binStr = toBin16(activeVal);
+
+    dom.bannerHex.textContent = toHex4(activeVal);
+
+    // Render 16 Bit Chips
+    dom.bannerBinArray.innerHTML = '';
+    for (let b = 0; b < 16; b++) {
+        const chip = document.createElement('div');
+        chip.className = 'bit-chip';
+        chip.textContent = binStr[b];
+        dom.bannerBinArray.appendChild(chip);
+    }
+}
+
+// Render Radial Arc Gauge & Power Breakdown
+function renderPowerGauges(cycle) {
+    const power = Number(cycle.power_mw || 0);
+    dom.gaugePowerValue.textContent = power.toFixed(3);
+
+    // Energy formatting
+    const energy = Number(cycle.accumulated_energy_mj || 0);
+    if (energy < 0.001) {
+        dom.statEnergy.textContent = (energy * 1000).toFixed(3) + ' µJ';
+    } else {
+        dom.statEnergy.textContent = energy.toFixed(4) + ' mJ';
+    }
+
+    // Radial Gauge Arc Stroke (Circumference: 2 * PI * 66 = 414.69)
+    const maxScale = 2.5; // mW
+    const circumference = 414.69;
+    const fillRatio = Math.min(1.0, Math.max(0.01, power / maxScale));
+    const offset = circumference * (1 - fillRatio);
+    dom.gaugeArc.style.strokeDashoffset = offset;
+
+    // Dynamic Color Arc Transition
+    let arcColor = 'var(--emerald-hit)';
+    let regime = 'MATCH HIT';
+    let regimeClass = 'pill-badge hit';
+
+    if (power === 0.0) {
+        arcColor = 'var(--text-muted)';
+        regime = 'CLOCK GATED';
+        regimeClass = 'pill-badge';
+    } else if (power <= 0.005) {
+        arcColor = 'var(--purple-write)';
+        regime = 'LEAKAGE (2 µW)';
+        regimeClass = 'pill-badge write';
+    } else if (power <= 0.45) {
+        arcColor = 'var(--emerald-hit)';
+        regime = cycle.hit ? 'MATCH HIT' : 'LOW MISS';
+        regimeClass = cycle.hit ? 'pill-badge hit' : 'pill-badge low';
+    } else if (power <= 1.2) {
+        arcColor = 'var(--amber-power)';
+        regime = 'MED POWER';
+        regimeClass = 'pill-badge low';
+    } else {
+        arcColor = 'var(--rose-miss)';
+        regime = 'PEAK MISS (2.09 mW)';
+        regimeClass = 'pill-badge peak';
+    }
+
+    dom.gaugeArc.style.stroke = arcColor;
+    dom.regimeTag.textContent = regime;
+    dom.regimeTag.className = regimeClass;
+
+    // Power Breakdown: Static Leakage vs Dynamic Switching
+    const pLeakage = Number(state.simulationData?.p_leakage_mw || 0.002);
+    const pDynamic = Math.max(0, power - pLeakage);
+    const dynamicPercent = power > 0 ? (pDynamic / power) * 100 : 0;
+    const leakagePercent = power > 0 ? (pLeakage / power) * 100 : 100;
+
+    dom.barLeakage.style.width = leakagePercent.toFixed(1) + '%';
+    dom.barDynamic.style.width = dynamicPercent.toFixed(1) + '%';
+    dom.breakdownTotal.textContent = `P_tot = ${power.toFixed(3)} mW`;
+    dom.valPLeakage.textContent = pLeakage.toFixed(3) + ' mW';
+    dom.valPDynamic.textContent = pDynamic.toFixed(3) + ' mW';
+
+    // Result & Mismatch tiles
+    dom.statMismatches.textContent = `${cycle.total_mismatches || 0} bits`;
+    if (cycle.op_type === 'WRITE') {
+        dom.statResult.textContent = `WRITE @ Row ${cycle.write_addr}`;
+        dom.statResult.className = 'tile-stat';
+        dom.statResult.style.color = 'var(--purple-write)';
+    } else if (cycle.hit) {
+        dom.statResult.textContent = `HIT @ Row ${cycle.hit_addr}`;
+        dom.statResult.className = 'tile-stat hit-text';
+        dom.statResult.style.color = 'var(--emerald-hit)';
+    } else {
+        dom.statResult.textContent = 'MISS (No Match)';
+        dom.statResult.className = 'tile-stat miss-text';
+        dom.statResult.style.color = 'var(--rose-miss)';
+    }
+}
+
+// Render 10x16 Interactive CAM Memory Grid
 function renderCamGrid(cycle) {
-    elements.camGrid.innerHTML = '';
+    dom.camGrid.innerHTML = '';
     const camArray = cycle.cam_snapshot || [];
     const lineMismatches = cycle.line_mismatches || [];
-    const searchValDec = cycle.search_pattern_dec || parseInt(cycle.search_pattern, 16);
+    const searchValDec = cycle.search_pattern_dec || parseInt(cycle.search_pattern, 16) || 0;
+    const searchBinStr = toBin16(searchValDec);
 
-    for (intIdx = 0; intIdx < 10; intIdx++) {
-        const rowValDec = camArray[intIdx] || 0;
+    for (let r = 0; r < 10; r++) {
+        const rowValDec = camArray[r] || 0;
         const rowBinStr = toBin16(rowValDec);
-        const searchBinStr = toBin16(searchValDec);
-
-        const isHitRow = (cycle.op_type === 'SEARCH' && cycle.hit && cycle.hit_addr === intIdx);
-        const isWriteRow = (cycle.op_type === 'WRITE' && cycle.write_addr === intIdx);
+        const isWinningRow = (cycle.op_type === 'SEARCH' && cycle.hit && cycle.hit_addr === r);
+        const isWriteRow = (cycle.op_type === 'WRITE' && cycle.write_addr === r);
 
         const rowElem = document.createElement('div');
-        rowElem.className = 'cam-row' + (isHitRow ? ' is-hit' : '') + (isWriteRow ? ' is-write-target' : '');
+        rowElem.className = 'cam-row' + (isWinningRow ? ' is-winning-hit' : '') + (isWriteRow ? ' is-write-target' : '');
 
-        // Row Label
-        const labelElem = document.createElement('div');
-        labelElem.className = 'row-label';
-        labelElem.innerHTML = `Entry <strong>${intIdx}</strong>`;
+        // Col 1: Entry Index
+        const indexCell = document.createElement('div');
+        indexCell.className = 'row-index-cell';
+        indexCell.textContent = `Row ${r}`;
 
-        // 16 Bit Cells
-        const cellsContainer = document.createElement('div');
-        cellsContainer.className = 'bit-cells-container';
+        // Col 2: 16 Bit Blocks with Interactive XOR Tooltip
+        const bitsStrip = document.createElement('div');
+        bitsStrip.className = 'bit-cell-strip';
 
-        let rowMismatchCount = 0;
+        let rowDiffCount = 0;
         for (let b = 0; b < 16; b++) {
-            const bitCell = document.createElement('div');
-            const isMatch = (rowBinStr[b] === searchBinStr[b]);
+            const bitBlock = document.createElement('div');
+            const bitVal = rowBinStr[b];
+            const queryBit = searchBinStr[b];
+            const isMatch = (bitVal === queryBit);
+
+            let blockState = 'bit-idle';
+            let tooltipText = `Bit [${15 - b}]: Stored = ${bitVal}`;
 
             if (cycle.op_type === 'SEARCH') {
                 if (isMatch) {
-                    bitCell.className = 'bit-cell matched';
+                    blockState = 'bit-match';
+                    tooltipText = `Bit [${15 - b}]: Stored(${bitVal}) ^ Query(${queryBit}) = 0 (MATCH)`;
                 } else {
-                    bitCell.className = 'bit-cell mismatched';
-                    rowMismatchCount++;
+                    blockState = 'bit-mismatch';
+                    rowDiffCount++;
+                    tooltipText = `Bit [${15 - b}]: Stored(${bitVal}) ^ Query(${queryBit}) = 1 (MISMATCH)`;
                 }
-            } else {
-                bitCell.className = 'bit-cell';
+            } else if (isWriteRow) {
+                blockState = 'bit-writing';
+                tooltipText = `Row ${r} Bit [${15 - b}] Written -> ${bitVal}`;
             }
 
-            bitCell.textContent = rowBinStr[b];
-            cellsContainer.appendChild(bitCell);
+            bitBlock.className = `bit-block ${blockState}`;
+            bitBlock.textContent = bitVal;
+
+            // Hover Tooltip
+            const tooltip = document.createElement('span');
+            tooltip.className = 'bit-tooltip';
+            tooltip.textContent = tooltipText;
+            bitBlock.appendChild(tooltip);
+
+            bitsStrip.appendChild(bitBlock);
         }
 
-        // Mismatch Count Label
-        const mismatchElem = document.createElement('div');
-        mismatchElem.className = 'row-mismatches';
-        mismatchElem.textContent = (cycle.op_type === 'SEARCH') ? `${lineMismatches[intIdx] ?? rowMismatchCount} diff bits` : '0 diff bits';
+        // Col 3: Hex Value
+        const hexCell = document.createElement('div');
+        hexCell.className = 'row-hex-cell';
+        hexCell.textContent = toHex4(rowValDec);
 
-        // Match Line Status Badge
-        const matchBadge = document.createElement('div');
+        // Col 4: Bit Divergence Count
+        const diffCell = document.createElement('div');
+        diffCell.className = 'row-diff-cell';
+        const displayDiff = (cycle.op_type === 'SEARCH') ? (lineMismatches[r] !== undefined ? lineMismatches[r] : rowDiffCount) : 0;
+        diffCell.textContent = `${displayDiff} diffs`;
+
+        // Col 5: Match Line Status Badge
+        const statusCell = document.createElement('div');
+        statusCell.className = 'row-status-cell';
+        const badge = document.createElement('span');
+
         if (cycle.op_type === 'SEARCH') {
-            if (lineMismatches[intIdx] === 0 || isHitRow) {
-                matchBadge.className = 'match-line-badge hit';
-                matchBadge.textContent = 'MATCH HIT';
+            if (isWinningRow || lineMismatches[r] === 0) {
+                badge.className = 'line-status-pill hit';
+                badge.textContent = 'MATCH HIT';
             } else {
-                matchBadge.className = 'match-line-badge miss';
-                matchBadge.textContent = 'DISCHARGED';
+                badge.className = 'line-status-pill miss';
+                badge.textContent = 'DISCHARGED';
+            }
+        } else if (cycle.op_type === 'WRITE') {
+            if (isWriteRow) {
+                badge.className = 'line-status-pill write';
+                badge.textContent = 'WRITING';
+            } else {
+                badge.className = 'line-status-pill idle';
+                badge.textContent = 'STANDBY';
             }
         } else {
-            matchBadge.className = 'match-line-badge miss';
-            matchBadge.textContent = isWriteRow ? 'WRITING' : 'IDLE';
+            badge.className = 'line-status-pill idle';
+            badge.textContent = 'GATED';
         }
 
-        rowElem.appendChild(labelElem);
-        rowElem.appendChild(cellsContainer);
-        rowElem.appendChild(mismatchElem);
-        rowElem.appendChild(matchBadge);
+        statusCell.appendChild(badge);
 
-        elements.camGrid.appendChild(rowElem);
+        rowElem.appendChild(indexCell);
+        rowElem.appendChild(bitsStrip);
+        rowElem.appendChild(hexCell);
+        rowElem.appendChild(diffCell);
+        rowElem.appendChild(statusCell);
+
+        dom.camGrid.appendChild(rowElem);
     }
 }
 
-// Draw HTML5 Canvas Waveform Trace Timeline
-function drawWaveformTimeline() {
-    const canvas = elements.waveformCanvas;
-    const ctx = canvas.getContext('2d');
-    canvas.width = canvas.parentElement.clientWidth || 800;
-    canvas.height = 180;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const cycles = state.simulationData?.cycles || [];
-    if (cycles.length === 0) return;
-
-    const padding = 60;
-    const graphWidth = canvas.width - padding - 20;
-    const stepX = graphWidth / Math.max(1, cycles.length - 1);
-
-    // Draw grid lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 1;
-
-    const signals = [
-        { name: 'clk', y: 30, color: '#06b6d4' },
-        { name: 'write_en', y: 70, color: '#a855f7' },
-        { name: 'match_found', y: 110, color: '#10b981' },
-        { name: 'power_mw', y: 150, color: '#f59e0b' }
-    ];
-
-    signals.forEach(sig => {
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '11px Fira Code';
-        ctx.fillText(sig.name, 10, sig.y + 4);
-
-        ctx.beginPath();
-        ctx.moveTo(padding, sig.y);
-        ctx.lineTo(canvas.width - 20, sig.y);
-        ctx.stroke();
-    });
-
-    // Draw signals for each cycle
-    signals.forEach(sig => {
-        ctx.strokeStyle = sig.color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        cycles.forEach((c, idx) => {
-            const x = padding + idx * stepX;
-            let val = 0;
-            if (sig.name === 'clk') val = (idx % 2 === 0) ? 1 : 0;
-            else if (sig.name === 'write_en') val = (c.op_type === 'WRITE') ? 1 : 0;
-            else if (sig.name === 'match_found') val = c.hit ? 1 : 0;
-            else if (sig.name === 'power_mw') val = Math.min(1, c.power_mw / 2.5);
-
-            const yHigh = sig.y - 12;
-            const yLow = sig.y + 4;
-            const yPos = sig.name === 'power_mw' ? (sig.y - (val * 18)) : (val ? yHigh : yLow);
-
-            if (idx === 0) {
-                ctx.moveTo(x, yPos);
-            } else {
-                if (sig.name !== 'power_mw') {
-                    const prevX = padding + (idx - 1) * stepX;
-                    ctx.lineTo(x, ctx.lastY || yPos);
-                }
-                ctx.lineTo(x, yPos);
-            }
-            ctx.lastY = yPos;
-        });
-        ctx.stroke();
-    });
-
-    // Draw Current Cycle Vertical Cursor Indicator
-    const cursorX = padding + state.currentCycleIndex * stepX;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(cursorX, 10);
-    ctx.lineTo(cursorX, canvas.height - 10);
-    ctx.stroke();
-    ctx.setLineDash([]);
-}
-
-// Playback Control Functions
+// Playback Engine
 function togglePlayPause() {
     if (state.isPlaying) {
         pauseSimulation();
@@ -463,10 +654,11 @@ function togglePlayPause() {
 
 function playSimulation() {
     state.isPlaying = true;
-    elements.btnPlay.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> <span>Pause</span>';
+    dom.btnPlay.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg><span>Pause</span>';
     state.timer = setInterval(() => {
-        if (state.currentCycleIndex < (state.simulationData?.cycles?.length || 1) - 1) {
-            renderCycle(state.currentCycleIndex + 1);
+        const total = state.simulationData?.cycles?.length || 1;
+        if (state.currentCycleIndex < total - 1) {
+            jumpToCycle(state.currentCycleIndex + 1);
         } else {
             jumpToCycle(0);
         }
@@ -475,35 +667,24 @@ function playSimulation() {
 
 function pauseSimulation() {
     state.isPlaying = false;
-    elements.btnPlay.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> <span>Play</span>';
+    dom.btnPlay.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span>Play</span>';
     if (state.timer) clearInterval(state.timer);
 }
 
-function jumpToCycle(idx) {
-    if (!state.simulationData) return;
-    const maxIdx = state.simulationData.cycles.length - 1;
-    const target = Math.max(0, Math.min(maxIdx, idx));
-    renderCycle(target);
-}
-
-// Execute Interactive Search/Write Query via Backend API
+// Execute Custom Query in SystemC Engine
 async function executeCustomQuery() {
     const mode = state.opMode;
-    let patternHex = elements.inputPattern.value.trim().replace(/^0x/i, '');
-    const writeAddr = parseInt(elements.inputWriteAddr.value, 10);
-    let writeDataHex = elements.inputWriteData.value.trim().replace(/^0x/i, '');
+    const patternRaw = dom.inputPattern.value.trim();
+    const patternDec = parseHexSafe(patternRaw, 0xA5A5);
+    const writeAddr = Math.max(0, Math.min(9, parseInt(dom.inputWriteAddr.value, 10) || 0));
+    const writeDataRaw = dom.inputWriteData.value.trim();
+    const writeDataDec = parseHexSafe(writeDataRaw, 0xDEAD);
 
-    patternHex = patternHex.padStart(4, '0').slice(-4);
-    writeDataHex = writeDataHex.padStart(4, '0').slice(-4);
-
-    const patternDec = parseInt(patternHex, 16);
-    const writeDataDec = parseInt(writeDataHex, 16);
-
-    elements.statusText.textContent = 'Evaluating SystemC...';
-    elements.systemStatus.className = 'status-badge';
+    dom.statusText.textContent = 'Simulating Cycle in SystemC...';
+    dom.systemStatus.className = 'engine-badge';
 
     try {
-        const response = await fetch('/api/simulate', {
+        const res = await fetch('/api/simulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -514,46 +695,34 @@ async function executeCustomQuery() {
             })
         });
 
-        if (response.ok) {
-            const newDataset = await response.json();
-            state.simulationData = newDataset;
-            elements.totalCycles.textContent = state.simulationData.cycles.length;
-            renderCycle(state.simulationData.cycles.length - 1);
-            elements.statusText.textContent = 'SystemC Engine Ready';
-            elements.systemStatus.className = 'status-badge live';
-            logConsole(`Custom ${mode} (0x${patternHex.toUpperCase()}) computed live by SystemC backend`, 'success');
-            return;
-        }
-    } catch (err) {
-        // Fallback live calculation in client JS if web server API endpoint is offline
-        simulateInJS(mode, patternDec, writeAddr, writeDataDec);
-        elements.statusText.textContent = 'Client Engine Active';
-        elements.systemStatus.className = 'status-badge live';
-    }
-}
-
-// Trigger Backend SystemC Re-compilation & Re-run
-async function executeSystemCBackend() {
-    elements.statusText.textContent = 'Running sim.exe...';
-    try {
-        const res = await fetch('/api/recompile', { method: 'POST' });
         if (res.ok) {
-            await loadSimulationData();
-            elements.statusText.textContent = 'SystemC Engine Ready';
-            logConsole('Re-compiled and executed SystemC C++ backend binary successfully', 'success');
+            const data = await res.json();
+            if (data && Array.isArray(data.cycles)) {
+                state.simulationData = data;
+                dom.totalCycles.textContent = data.cycles.length;
+                dom.statusText.textContent = 'SystemC Kernel Active';
+                dom.systemStatus.className = 'engine-badge live';
+                
+                // Jump to the newly executed cycle
+                jumpToCycle(data.cycles.length - 1);
+                logConsole(`[CUSTOM] Executed ${mode} in C++ SystemC engine -> Cycle ${data.cycles.length}`, 'success');
+                return;
+            }
         }
-    } catch (e) {
-        logConsole('Running standalone mode (sim.exe output read locally)', 'info');
-        loadSimulationData();
+        throw new Error('Server returned invalid simulation output');
+    } catch (err) {
+        console.warn('Backend simulate failed, executing in local client JS engine:', err);
+        executeClientFallback(mode, patternDec, writeAddr, writeDataDec);
     }
 }
 
-// Local simulation fallback if standalone static html
-function simulateInJS(mode, patternDec, writeAddr, writeDataDec) {
-    const lastCycle = state.simulationData.cycles[state.simulationData.cycles.length - 1];
-    const newCycleIdx = state.simulationData.cycles.length + 1;
-    const newTime = lastCycle.time_ns + 10;
-    const currentSnapshot = [...lastCycle.cam_snapshot];
+// Client Fallback Simulation Engine
+function executeClientFallback(mode, patternDec, writeAddr, writeDataDec) {
+    const cycles = state.simulationData.cycles;
+    const lastCycle = cycles[cycles.length - 1];
+    const newCycleIdx = cycles.length + 1;
+    const newTime = (lastCycle?.time_ns || 0) + 10;
+    const snapshot = [...(lastCycle?.cam_snapshot || [42405, 42406, 42407, 42408, 42409, 42410, 42411, 42412, 42413, 42414])];
 
     let hit = false;
     let hitAddr = -1;
@@ -561,13 +730,11 @@ function simulateInJS(mode, patternDec, writeAddr, writeDataDec) {
     const lineMismatches = [];
 
     if (mode === 'WRITE') {
-        if (writeAddr >= 0 && writeAddr < 10) {
-            currentSnapshot[writeAddr] = writeDataDec;
-        }
+        snapshot[writeAddr] = writeDataDec;
     } else {
-        for (let i = 0; i < 10; i++) {
-            const entry = currentSnapshot[i];
-            const xorMap = entry ^ patternDec;
+        for (let r = 0; r < 10; r++) {
+            const rowVal = snapshot[r];
+            const xorMap = rowVal ^ patternDec;
             let diffs = 0;
             for (let b = 0; b < 16; b++) {
                 if ((xorMap & (1 << b)) !== 0) diffs++;
@@ -577,43 +744,88 @@ function simulateInJS(mode, patternDec, writeAddr, writeDataDec) {
 
             if (diffs === 0 && !hit) {
                 hit = true;
-                hitAddr = i;
+                hitAddr = r;
             }
         }
     }
 
     const pLeakage = 0.002;
     const powerMw = (mode === 'WRITE') ? pLeakage : (pLeakage + totalMismatches * 0.015);
-    const accumEnergy = lastCycle.accumulated_energy_mj + (powerMw * 10e-6);
+    const accumEnergy = (lastCycle?.accumulated_energy_mj || 0) + (powerMw * 10e-6);
 
     const newCycle = {
         cycle: newCycleIdx,
         time_ns: newTime,
         op_type: mode,
-        search_pattern: '0x' + patternDec.toString(16).padStart(4, '0'),
+        search_pattern: toHex4(patternDec).toLowerCase(),
         search_pattern_dec: patternDec,
-        write_data: '0x' + writeDataDec.toString(16).padStart(4, '0'),
+        write_data: toHex4(writeDataDec).toLowerCase(),
         write_addr: writeAddr,
         hit: hit,
         hit_addr: hitAddr,
         total_mismatches: totalMismatches,
         power_mw: powerMw,
         accumulated_energy_mj: accumEnergy,
-        cam_snapshot: currentSnapshot,
+        cam_snapshot: snapshot,
         line_mismatches: lineMismatches
     };
 
-    state.simulationData.cycles.push(newCycle);
-    elements.totalCycles.textContent = state.simulationData.cycles.length;
-    renderCycle(state.simulationData.cycles.length - 1);
-    logConsole(`[LIVE SIM] Calculated ${mode} cycle for 0x${patternDec.toString(16).toUpperCase()}`, 'success');
+    cycles.push(newCycle);
+    dom.totalCycles.textContent = cycles.length;
+    dom.statusText.textContent = 'Client Engine Active';
+    dom.systemStatus.className = 'engine-badge live';
+    jumpToCycle(cycles.length - 1);
+    logConsole(`[CLIENT SIM] Executed ${mode} in browser -> Cycle ${cycles.length}`, 'warn');
 }
 
-// Log line into Console Box
+// Recompile SystemC Backend
+async function executeSystemCBackend() {
+    dom.statusText.textContent = 'Recompiling MinGW C++...';
+    try {
+        const res = await fetch('/api/recompile', { method: 'POST' });
+        if (res.ok) {
+            await loadSimulationData();
+            logConsole('[BUILD] MinGW g++ compilation and execution successful', 'success');
+        } else {
+            const err = await res.json();
+            logConsole('[BUILD ERROR] ' + (err.error || 'Compilation failed'), 'error');
+        }
+    } catch (e) {
+        logConsole('[NOTICE] Server offline, loading local trace data', 'info');
+        loadSimulationData();
+    }
+}
+
+// Reset to Baseline
+async function resetToBaseline() {
+    try {
+        await fetch('/api/simulate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}) // Empty parameters runs baseline 5 cycles
+        });
+    } catch (e) {}
+    await loadSimulationData();
+    jumpToCycle(0);
+    logConsole('[RESET] Restored baseline 5-cycle verification suite', 'info');
+}
+
+// Append Line to Console
+function emitConsoleLog(cycle) {
+    if (cycle.op_type === 'WRITE') {
+        logConsole(`[${cycle.time_ns.toFixed(1)} ns] WRITE row ${cycle.write_addr} with data ${cycle.write_data}`, 'info');
+    } else {
+        const hitStr = cycle.hit ? `HIT @ Row ${cycle.hit_addr}` : 'MISS';
+        const type = cycle.hit ? 'success' : (cycle.total_mismatches > 100 ? 'warn' : 'info');
+        logConsole(`[${cycle.time_ns.toFixed(1)} ns] SEARCH ${cycle.search_pattern} -> ${hitStr} (${cycle.total_mismatches} mismatches, ${cycle.power_mw.toFixed(3)} mW)`, type);
+    }
+}
+
 function logConsole(msg, type = 'info') {
+    if (!dom.consoleOutput) return;
     const line = document.createElement('div');
-    line.className = 'log-line ' + type;
+    line.className = `log-line ${type}`;
     line.textContent = msg;
-    elements.consoleOutput.appendChild(line);
-    elements.consoleOutput.scrollTop = elements.consoleOutput.scrollHeight;
+    dom.consoleOutput.appendChild(line);
+    dom.consoleOutput.scrollTop = dom.consoleOutput.scrollHeight;
 }

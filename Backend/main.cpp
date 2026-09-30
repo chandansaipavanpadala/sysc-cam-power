@@ -91,11 +91,42 @@ int sc_main(int argc, char* argv[]) {
     sc_start(10, SC_NS);
 
     bool wait_for_keypress = true;
+    std::string custom_op = "";
+    unsigned int custom_pattern = 0;
+    unsigned int custom_write_addr = 0;
+    unsigned int custom_write_data = 0;
+    bool has_custom = false;
+
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--no-pause" || arg == "-n") {
             wait_for_keypress = false;
+        } else if (arg == "--op" && i + 1 < argc) {
+            custom_op = argv[++i];
+            has_custom = true;
+        } else if (arg == "--pattern" && i + 1 < argc) {
+            std::string p = argv[++i];
+            custom_pattern = std::stoul(p, nullptr, 0);
+        } else if (arg == "--addr" && i + 1 < argc) {
+            custom_write_addr = std::stoul(argv[++i], nullptr, 0);
+        } else if (arg == "--data" && i + 1 < argc) {
+            std::string d = argv[++i];
+            custom_write_data = std::stoul(d, nullptr, 0);
         }
+    }
+
+    // Execute Custom User Cycle if requested via CLI
+    if (has_custom) {
+        std::cout << "\n--- CUSTOM CYCLE EXECUTION (" << custom_op << ") ---\n";
+        if (custom_op == "WRITE") {
+            write_en.write(true);
+            write_addr.write(custom_write_addr);
+            write_data.write(custom_write_data);
+        } else {
+            write_en.write(false);
+            search_pattern.write(custom_pattern);
+        }
+        sc_start(10, SC_NS);
     }
 
     // ------------------------------------------------------------------------

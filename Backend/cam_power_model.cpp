@@ -13,6 +13,7 @@ CAM_Power_Model::CAM_Power_Model(sc_module_name name)
 {
     SC_METHOD(cam_operation);
     sensitive << clk.pos();
+    dont_initialize();
 
     // Initialize CAM entries with distinct deterministic patterns
     // Entry 0: 0xA5A5, Entry 1: 0xA5A6, ..., Entry 9: 0xA5AE
