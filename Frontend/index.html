@@ -93,25 +93,25 @@
                         <span class="pill-metric">139b Miss &bull; 2.087 mW</span>
                     </div>
                 </button>
-                <button class="tc-pill" data-tc-index="2" title="TC3: Write 0xDEAD into Row 5">
-                    <span class="pill-badge write">WRITE</span>
+                <button class="tc-pill" data-tc-index="2" title="TC3: Direct Write 0x1234 into Row 3">
+                    <span class="pill-badge write">DIR WRITE</span>
                     <div class="pill-body">
-                        <span class="pill-title">TC3: Write 0xDEAD</span>
-                        <span class="pill-metric">Row 5 &bull; 0.002 mW</span>
+                        <span class="pill-title">TC3: Direct Write</span>
+                        <span class="pill-metric">Row 3 &bull; 0.002 mW</span>
                     </div>
                 </button>
-                <button class="tc-pill" data-tc-index="3" title="TC4: Re-Search 0xDEAD (Verification Hit at Row 5)">
+                <button class="tc-pill" data-tc-index="3" title="TC4: Indirect Write 0xDEAD (Base 2 + Offset 3 -> Row 5)">
+                    <span class="pill-badge write">IND WRITE</span>
+                    <div class="pill-body">
+                        <span class="pill-title">TC4: Indirect Write</span>
+                        <span class="pill-metric">Base 2+3 &bull; 0.002 mW</span>
+                    </div>
+                </button>
+                <button class="tc-pill" data-tc-index="4" title="TC5: Re-Search 0xDEAD (Verification Hit at Row 5)">
                     <span class="pill-badge hit">HIT</span>
                     <div class="pill-body">
-                        <span class="pill-title">TC4: 0xDEAD</span>
+                        <span class="pill-title">TC5: 0xDEAD</span>
                         <span class="pill-metric">Hit @ Row 5 &bull; 1.022 mW</span>
-                    </div>
-                </button>
-                <button class="tc-pill" data-tc-index="4" title="TC5: Search 0xA5A4 (Low Power 1-Bit Mismatch)">
-                    <span class="pill-badge low">LOW MISS</span>
-                    <div class="pill-body">
-                        <span class="pill-title">TC5: 0xA5A4</span>
-                        <span class="pill-metric">26b Miss &bull; 0.392 mW</span>
                     </div>
                 </button>
             </div>

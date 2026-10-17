@@ -1,36 +1,58 @@
 # SystemC Content Addressable Memory (CAM) Power Estimation & Web Visualization Workbench
 
-An Electronic System-Level (ESL) hardware modeling and simulation framework for Content Addressable Memory (CAM) architectures. Built using SystemC (C++ IEEE 1666 standard) and an interactive web visual workbench, this tool provides architectural power estimation, bitwise match-line evaluation, VCD waveform tracing, and dynamic web visualization.
+An Electronic System-Level (ESL) hardware modeling and simulation framework for Content Addressable Memory (CAM) architectures. Built using SystemC (C++ IEEE 1666 standard) and an interactive web visual workbench, this tool provides architectural power estimation, bitwise match-line evaluation, configurable addressing modes (associative, direct, and indirect), SystemC channel instrumentation, VCD waveform tracing, and dynamic web visualization.
 
 ---
 
-## System Overview
-
-In modern System-on-Chip (SoC) design, power dissipation is a primary constraint alongside performance and die area. Traditional Register-Transfer Level (RTL) power estimation performed in Verilog or VHDL occurs late in the design cycle after logic synthesis and place-and-route, making architectural modifications time-consuming and expensive.
-
-This project implements an ESL cycle-accurate power estimation model of a 10-entry, 16-bit Content Addressable Memory (CAM) module. By modeling hardware at the system abstraction layer, hardware architects can:
-1. Estimate dynamic match-line switching power prior to RTL implementation.
-2. Quantify the power impact of bit mismatches across memory rows during high-frequency lookups.
-3. Validate clock-gating strategies and early system-level power budgets.
-4. Visualize hardware memory states, bitwise XOR comparisons, and digital waveforms in real time.
+## Table of Contents
+1. [System Overview & Base Paper Context](#system-overview--base-paper-context)
+2. [Application Domains & Edge SoC Utility](#application-domains--edge-soc-utility)
+3. [Architecture & Hardware Microarchitecture](#architecture--hardware-microarchitecture)
+4. [Part 1: Parameterization Architecture (Eliminating Hardcoded Values)](#part-1-parameterization-architecture-eliminating-hardcoded-values)
+5. [Part 2: Configurable Addressing Modes Deep Dive](#part-2-configurable-addressing-modes-deep-dive)
+6. [Part 3: SystemC Channel Taxonomy & Delta Cycle Semantics](#part-3-systemc-channel-taxonomy--delta-cycle-semantics)
+7. [Mathematical Power & Energy Model](#mathematical-power--energy-model)
+8. [Repository Directory Structure](#repository-directory-structure)
+9. [Part 4: Simulation Verification & Test Scenarios](#part-4-simulation-verification--test-scenarios)
+10. [Visual Demonstration & Experimental Analysis](#visual-demonstration--experimental-analysis)
+11. [Waveform Tracing & Logic Analysis](#waveform-tracing--logic-analysis)
+12. [Part 5: Viva Defense & Live Code Modification Walkthrough](#part-5-viva-defense--live-code-modification-walkthrough)
+13. [Build, Compilation, and Execution](#build-compilation-and-execution)
+14. [Academic References](#academic-references)
 
 ---
 
-## Application Domains & Construction Industry Utility
+## System Overview & Base Paper Context
 
-Content Addressable Memory (CAM) provides single-cycle parallel $O(1)$ lookup capability. This high-speed parallel matching architecture is critical in domain-specific edge SoC computing:
+In modern System-on-Chip (SoC) design, power dissipation is a primary design constraint alongside operational frequency and silicon die area. Traditional Register-Transfer Level (RTL) power analysis in Verilog or VHDL occurs late in the design flow after synthesis and place-and-route, making architectural modifications costly and slow.
+
+This framework is inspired by and advances the methodologies established in the foundation paper:
+> **Base Paper:** I-Jui Tung, Che-Wei Chou, and Jing-Ying Chen, *"A SystemC Content Addressable Memory Power Estimation Tool for Early Design Verification"*, **IEEE International Conference on Systems, Man, and Cybernetics (SMC)**, 2010.
+
+By implementing an ESL cycle-accurate power estimation engine in IEEE 1666 SystemC, hardware architects can:
+1. Eliminate hardcoded hardware dimensions through dynamic C++ template metaprogramming (`CAM_DEPTH`, `CAM_WIDTH`).
+2. Explore multiple addressing modes: Content/Associative addressing for single-cycle queries, alongside Direct and Indirect (Base + Offset) addressing for memory writes.
+3. Explicitly instrument and observe SystemC primitive communication channels (`sc_prim_channel`) and evaluate-update delta cycle semantics.
+4. Estimate dynamic match-line switching dissipation and leakage floors long before committing to RTL synthesis.
+5. Inspect hardware memory states, bitwise XOR comparisons, and digital waveforms in an Electronic Design Automation (EDA) web workbench.
+
+---
+
+## Application Domains & Edge SoC Utility
+
+Content Addressable Memory (CAM) provides single-cycle parallel $O(1)$ search capability by interrogating all memory entries simultaneously. This architecture is vital across multiple SoC edge domains:
 
 ### 1. Smart Construction Site Safety & Structural Health Monitoring (SHM) IoT Networks
 In smart construction site monitoring, wireless IoT sensor nodes equipped with multi-axis accelerometers, strain gauges, temperature sensors, and tilt meters continuously evaluate structural integrity and worker safety metrics. 
 
 CAM modules operating on edge hardware act as ultra-low-latency anomaly detectors. Sensor measurement vectors are matched in parallel against pre-programmed structural hazard thresholds. Modeling match-line dynamic power dissipation in SystemC enables hardware designers to optimize power budgets and maximize battery operating lifetimes for wireless sensor nodes deployed on construction sites.
 
-### 2. High-Speed Network IP Routing & Packet Processing
-In high-throughput enterprise routing hardware, CAM modules process network packet headers in parallel, matching IP addresses against stored forwarding table entries in a single clock cycle. SystemC power estimation models the dynamic power scaling during high-frequency IP address lookups.
+### 2. High-Speed Network IP Routing & Packet Header Processing
+In enterprise router hardware, CAM modules process incoming packet headers, comparing destination IP addresses (32-bit IPv4 or 128-bit IPv6) against routing tables in a single clock cycle. SystemC power estimation models dynamic match-line capacitive discharge during high-throughput packet classification.
 
 ---
 
-## Architecture & Microarchitecture
+## Architecture & Hardware Microarchitecture
 
 ### System-Level Integration Architecture
 
@@ -38,10 +60,10 @@ The framework consists of a native C++ SystemC simulation engine (`Backend/`) co
 
 ```mermaid
 graph TD
-    subgraph Backend ["Backend: SystemC Simulation Engine"]
+    subgraph Backend ["Backend: SystemC Simulation Engine (IEEE 1666)"]
         A["main.cpp (Testbench & Command Handler)"]
         B["CAM_Power_Model (cam_power_model.cpp)"]
-        C["SystemC Core Kernel (IEEE 1666)"]
+        C["SystemC Core Kernel (Delta Cycle Engine)"]
         D["simulation_data.json (Cycle State Trace)"]
         E["cam_trace.vcd (Value Change Dump Signal Trace)"]
         
@@ -73,62 +95,280 @@ graph TD
 ### CAM Hardware Microarchitecture Block Diagram
 
 ```text
-                               +----------------------------------------+
-                               |        Clock & Control Unit            |
-                               | (clk, enable, write_en, write_addr)    |
-                               +-------------------+--------------------+
-                                                   |
-                                                   v
-+-----------------------+              +-----------+--------------------+
-|  Query Word Register  |------------->|  10-Entry x 16-Bit CAM Memory  |
-|   (search_pattern)    |              |       Storage Array            |
-+-----------------------+              +-----------+--------------------+
-            |                                      |
-            v                                      v
+                               +-------------------------------------------------------------+
+                               |                    Clock & Control Unit                     |
+                               | (clk, enable, write_en, addr_mode_indirect, base_ptr_reg)   |
+                               +-----------------------------+-------------------------------+
+                                                             |
+                 +-------------------------------------------+-------------------------------+
+                 |                                                                           |
+                 v (Associative Search Path)                                                 v (Write Path: Direct vs Indirect)
++------------------------------------+                                      +------------------------------------+
+|        Query Word Register         |                                      |       Effective Address Unit       |
+|          (search_pattern)          |                                      |   Direct: EA = write_addr          |
++-----------------+------------------+                                      |   Indirect: EA = Base + write_addr |
+                  |                                                         +-----------------+------------------+
+                  |                                                                           |
+                  |     +---------------------------------------------------------------------+
+                  |     |
+                  v     v
++-----------------------------------------------------------------------+
+|                     CAM Memory Storage Array                          |
+|                     (CAM_DEPTH x CAM_WIDTH)                           |
+|       Entry 0  : [ Cell 0,0  ] [ Cell 0,1  ] ... [ Cell 0,W-1  ]       |
+|       Entry 1  : [ Cell 1,0  ] [ Cell 1,1  ] ... [ Cell 1,W-1  ]       |
+|       ...                                                             |
+|       Entry D-1: [ Cell D-1,0] [ Cell D-1,1] ... [ Cell D-1,W-1]       |
++-----------------------------------------------------------------------+
+                  |
+                  v
 +-----------------------------------------------------------------------+
 |                 Parallel Bitwise XOR Comparator Matrix                |
-|       Line 0: CAM[0] ^ Pattern  ---> Line 0 Mismatches & Match Line   |
-|       Line 1: CAM[1] ^ Pattern  ---> Line 1 Mismatches & Match Line   |
+|       Row 0: Entry[0]   ^ Pattern  ---> Line 0 Mismatches & Match-0   |
+|       Row 1: Entry[1]   ^ Pattern  ---> Line 1 Mismatches & Match-1   |
 |       ...                                                             |
-|       Line 9: CAM[9] ^ Pattern  ---> Line 9 Mismatches & Match Line   |
+|       Row D-1: Entry[D-1] ^ Pattern ---> Line D-1 Mismatches & Match-D |
 +-----------------------------------------------------------------------+
-            |                                      |
-            v                                      v
-+-----------------------+              +--------------------------------+
-| Priority Encoder Unit |              |  Match-Line Dynamic & Static   |
-| (First Match Finder)  |              |    Power Calculation Engine    |
-+-----------+-----------+              +---------------+----------------+
-            |                                          |
-            v                                          v
-+-----------------------+              +--------------------------------+
-| Outputs: match_found, |              | Output: estimated_power_mw     |
-|       match_addr      |              | Accumulator: energy_mj         |
-+-----------------------+              +--------------------------------+
+                  |                                          |
+                  v                                          v
++------------------------------------+      +------------------------------------+
+|       Priority Encoder Unit        |      |    Match-Line Dynamic & Static     |
+|   (Resolves Lowest Match Index)    |      |      Power Calculation Engine      |
++-----------------+------------------+      +-----------------+------------------+
+                  |                                           |
+                  v                                           v
++------------------------------------+      +------------------------------------+
+| Outputs: match_found, match_addr   |      | Outputs: estimated_power_mw,       |
+|                                    |      |          accumulated_energy_mj     |
++------------------------------------+      +------------------------------------+
 ```
+
+---
+
+## Part 1: Parameterization Architecture (Eliminating Hardcoded Values)
+
+Prior implementations hardcoded array dimensions (`#define CAM_DEPTH 10`, `#define CAM_WIDTH 16`), static power figures, and memory contents using inline literals. This refactoring completely eliminates hardcoding by introducing C++ template metaprogramming and dynamic constructor parameters.
+
+### 1. C++ Template Parameterization (`Backend/cam_power_model.h`)
+
+The `CAM_Power_Model` class is parameterized over memory depth and word width:
+
+```cpp
+template <unsigned int CAM_DEPTH = 10, unsigned int CAM_WIDTH = 16>
+class CAM_Power_Model : public sc_module {
+public:
+    // Scalable data bus type: sc_uint for width <= 64, sc_biguint for arbitrary width (e.g. 128-bit IPv6)
+    using data_t = typename std::conditional<(CAM_WIDTH > 64), 
+                                             sc_biguint<CAM_WIDTH>, 
+                                             sc_uint<CAM_WIDTH>>::type;
+    ...
+};
+```
+
+#### Dynamic Data Width Selection (`data_t`)
+In SystemC, `sc_uint<W>` is limited to $W \le 64$ bits. By employing `std::conditional`, widths greater than 64 (such as 128-bit IPv6 addresses) seamlessly switch to `sc_biguint<W>` without compiler truncation warnings or shift overflows.
+
+### 2. Dynamic Constructor Parameters
+
+Empirical power coefficients and base registers are passed dynamically into the module constructor:
+
+```cpp
+CAM_Power_Model(sc_module_name name, 
+                double p_leak = 0.002, 
+                double e_factor = 0.015, 
+                sc_uint<32> init_base_ptr = 0);
+```
+
+Stored internally as member variables:
+* `p_leakage` (Static floor, default: $0.002 \text{ mW}$)
+* `e_mismatch_factor` (Dynamic coefficient, default: $0.015 \text{ mW/mismatched bit}$)
+* `base_pointer_reg` (Base address register for indirect writes)
+
+### 3. Dynamic Memory Initialization (`load_initial_memory`)
+
+Hardcoded initialization loops (`cam_array[i] = 0xA5A5 + i;`) are removed. Memory is initialized at runtime via a dedicated member function:
+
+```cpp
+void load_initial_memory(const std::vector<data_t>& init_data);
+```
+
+In `main.cpp`, initial contents are passed dynamically:
+```cpp
+std::vector<sc_uint<16>> initial_contents = {
+    0xA5A5, 0xA5A6, 0xA5A7, 0xA5A8, 0xA5A9,
+    0xA5AA, 0xA5AB, 0xA5AC, 0xA5AD, 0xA5AE
+};
+cam.load_initial_memory(initial_contents);
+```
+
+---
+
+## Part 2: Configurable Addressing Modes Deep Dive
+
+The hardware model supports multiple addressing paradigms for read (search) and write operations.
+
+### 1. Associative / Content Addressing Mode (Search Operations)
+
+Content Addressable Memory operates inversely to standard RAM. Instead of providing an address to retrieve data, the user provides a data word (`search_pattern`), and the CAM resolves the physical address where that data is stored in **1 single clock cycle** ($O(1)$ time complexity).
+
+* **Mechanism:** The `search_pattern` is broadcast across all entries simultaneously.
+* **Evaluation:** Each entry performs a parallel bitwise XOR:
+  $$\text{MismatchMap}_i = \text{cam\_array}[i] \oplus \text{search\_pattern}$$
+* **Hit Resolution:** If $\text{MismatchMap}_i = 0$, entry $i$ signals a match. The priority encoder returns the lowest matching index via `match_addr`.
+
+### 2. Switchable Direct vs. Indirect Addressing Modes (Write Operations)
+
+Writing into CAM requires specifying an explicit row index. The model introduces hardware control to switch between **Direct Addressing** and **Indirect (Base + Offset) Addressing**:
+
+```cpp
+enum AddressingMode { 
+    DIRECT_ADDRESSING   = 0, 
+    INDIRECT_ADDRESSING = 1 
+};
+```
+
+Control is governed by the input port:
+```cpp
+sc_in<bool> addr_mode_indirect; // 0 = Direct, 1 = Indirect
+```
+
+#### Mode A: Direct Addressing (`addr_mode_indirect = 0`)
+The index supplied on `write_addr` directly specifies the target physical row:
+$$EA = \text{write\_addr}$$
+
+#### Mode B: Indirect / Base-Offset Addressing (`addr_mode_indirect = 1`)
+The effective address is computed by adding the internal base pointer register to the offset provided on `write_addr`:
+$$EA = \text{base\_pointer\_reg} + \text{write\_addr}$$
+
+```text
+                         +-----------------------+
+                         |   base_pointer_reg    | (e.g., 2)
+                         +-----------+-----------+
+                                     |
+                                     v
++-----------------------+         +-----+
+|   write_addr (Offset) |-------->| Adder|------> Effective Address (EA = 2 + 3 = 5)
++-----------------------+         +-----+             |
+                                                      v
+                                        +---------------------------+
+                                        |  Bounds Check (EA < DEPTH)|
+                                        +-------------+-------------+
+                                                      |
+                                                      v
+                                        +---------------------------+
+                                        | cam_array[EA] = write_data|
+                                        +---------------------------+
+```
+
+#### Memory Bounds Checking
+Before committing any write operation, hardware bounds checking guarantees memory integrity:
+```cpp
+if (effective_addr < CAM_DEPTH) {
+    cam_array[effective_addr] = write_data.read();
+} else {
+    std::cout << "[ERROR] Address Out of Bounds! Effective: " 
+              << effective_addr << " >= Depth: " << CAM_DEPTH << std::endl;
+}
+```
+
+### Addressing Mode Comparison
+
+| Addressing Mode | Operational Context | Address Source | Effective Address Formula | Cycle Latency |
+| :--- | :--- | :--- | :--- | :--- |
+| **Associative (Content)** | Search / Lookup | Broadcast `search_pattern` | Resolved via Priority Encoder | 1 Clock Cycle ($O(1)$) |
+| **Direct Addressing** | Memory Write | Input port `write_addr` | $EA = \text{write\_addr}$ | 1 Clock Cycle |
+| **Indirect (Base+Offset)**| Relocatable Write | `base_pointer_reg` + `write_addr` | $EA = \text{base\_pointer\_reg} + \text{write\_addr}$ | 1 Clock Cycle |
+
+---
+
+## Part 3: SystemC Channel Taxonomy & Delta Cycle Semantics
+
+### SystemC Channel Taxonomy Table
+
+SystemC communication revolves around **channels** that implement interfaces (`sc_interface`). Channels are divided into:
+1. **Primitive Channels (`sc_prim_channel`):** Do not contain hierarchical processes; participate directly in the SystemC kernel's evaluate-update delta cycle.
+2. **Hierarchical Channels (`sc_channel`):** Modules containing internal processes, ports, or sub-channels (e.g., FIFO modules, bus crossbars).
+
+The testbench (`main.cpp`) explicitly instruments **10 Primitive Channels** connecting the testbench to the `CAM_Power_Model` instance:
+
+| # | Channel Name | C++ SystemC Type | Bit Width | Direction | Role & Description | Channel Taxonomy |
+| :-: | :--- | :--- | :-: | :-: | :--- | :--- |
+| **1** | `clk` | `sc_clock` | 1-bit | TB $\to$ CAM | Hardware master clock generator (100 MHz, 10 ns period, 50% duty cycle) | Primitive Channel |
+| **2** | `enable` | `sc_signal<bool>` | 1-bit | TB $\to$ CAM | Global module enable / clock-gating control (low = 0 mW dynamic power) | Primitive Channel |
+| **3** | `write_en` | `sc_signal<bool>` | 1-bit | TB $\to$ CAM | Synchronous memory write strobe (high = write cycle, low = search cycle) | Primitive Channel |
+| **4** | `addr_mode_indirect` | `sc_signal<bool>` | 1-bit | TB $\to$ CAM | Addressing mode selector: `0` = Direct, `1` = Indirect (Base + Offset) | Primitive Channel |
+| **5** | `write_addr` | `sc_signal<sc_uint<32>>` | 32-bit | TB $\to$ CAM | Memory write index register or offset register | Primitive Channel |
+| **6** | `match_addr` | `sc_signal<sc_uint<32>>` | 32-bit | CAM $\to$ TB | Priority-encoded address output representing first matching row index | Primitive Channel |
+| **7** | `search_pattern` | `sc_signal<data_t>` | 16-bit | TB $\to$ CAM | Query broadcast bus for parallel associative comparison | Primitive Channel |
+| **8** | `write_data` | `sc_signal<data_t>` | 16-bit | TB $\to$ CAM | Data bus carrying the word to be written into the CAM array | Primitive Channel |
+| **9** | `match_found` | `sc_signal<bool>` | 1-bit | CAM $\to$ TB | Active-high status flag indicating at least one row matched the query | Primitive Channel |
+| **10**| `estimated_power_mw` | `sc_signal<double>` | 64-bit | CAM $\to$ TB | Architectural power dissipation output in milliwatts ($P_{\text{total}}$) | Primitive Channel |
+
+All 10 channels inherit from `sc_prim_channel` and utilize the `sc_signal_inout_if<T>` interface.
+
+---
+
+### SystemC Delta Cycle ($\delta$-Cycle) & Evaluate-Update Mechanics
+
+The simulation kernel implements discrete-event simulation via **delta cycles** ($\delta$). A delta cycle models infinitesimal simulation progress ($\Delta t = 0$) where concurrent hardware processes evaluate without advancing simulated physical time.
+
+```text
+                  +-----------------------------------------------+
+                  |             Evaluate Phase                    |
+                  |  - All runnable SC_METHOD / SC_THREAD execute |
+                  |  - Processes read CURRENT values (m_cur_val)  |
+                  |  - Signal writes call request_update()        |
+                  |  - Staging buffers hold NEW values (m_new_val)|
+                  +-----------------------+-----------------------+
+                                          |
+                                          v
+                  +-----------------------------------------------+
+                  |               Update Phase                    |
+                  |  - Kernel invokes channel update() methods    |
+                  |  - m_cur_val = m_new_val                      |
+                  |  - Value changes trigger process sensitivity  |
+                  +-----------------------+-----------------------+
+                                          |
+                         More events in current delta?
+                                /                \
+                            [YES]                [NO]
+                              /                    \
+              Next Delta Cycle                     Advance Simulation Time
+              (Delta t = 0)                        to next scheduled event
+```
+
+#### Why Evaluate-Update Prevents Race Conditions
+In physical digital hardware, flip-flops hold their outputs while combinational logic settles. If a SystemC signal updated immediately upon assignment (`sig.write(val)`), execution order between parallel processes would depend on C++ thread scheduling (a non-deterministic race condition).
+
+By splitting updates into:
+1. **Evaluate Phase:** Reading `m_cur_val` while buffering written values in `m_new_val` and queuing `request_update()`.
+2. **Update Phase:** Copying `m_new_val` to `m_cur_val` only after all active processes yield.
+
+SystemC guarantees cycle-accurate, deterministic hardware behavior identical to synthesized RTL.
 
 ---
 
 ## Mathematical Power & Energy Model
 
 ### 1. Parallel Match-Line Bitwise XOR Evaluation
-In a binary Content Addressable Memory, each entry compares all 16 bits simultaneously against the query `search_pattern` using bitwise XOR logic:
+In a binary Content Addressable Memory, each entry compares all bits simultaneously against the query `search_pattern` using bitwise XOR logic:
 
-$$\text{MismatchMap}_i = \text{CamArray}[i] \oplus \text{SearchPattern}$$
+$$\text{MismatchMap}_i = \text{cam\_array}[i] \oplus \text{search\_pattern}$$
 
-For each bit position $b \in \{0, \dots, 15\}$, the bitwise mismatch is evaluated. The total bit mismatches for line $i$ is calculated as:
+For each bit position $b \in \{0, \dots, \text{WIDTH}-1\}$, the total bit mismatches for line $i$ is calculated as:
 
-$$\text{LineMismatches}_i = \sum_{b=0}^{15} \text{MismatchMap}_i[b]$$
+$$\text{LineMismatches}_i = \sum_{b=0}^{\text{WIDTH}-1} \text{MismatchMap}_i[b]$$
 
 If $\text{LineMismatches}_i = 0$, entry $i$ is designated a **MATCH (HIT)**.
 
 ### 2. Match-Line Dynamic Power Formula
-In physical CMOS CAM designs, match-lines are pre-charged to $V_{DD}$ every clock cycle. Any mismatched bit pair turns on a discharge path, dumping the pre-charged line capacitance to ground and consuming dynamic energy.
+In physical CMOS CAM circuits, match-lines are pre-charged to $V_{DD}$ prior to evaluation. Any mismatched bit turns on a discharge transistor, discharging the match-line capacitance to ground and consuming dynamic energy.
 
-The system-level power model computes instantaneous match-line power per cycle according to:
+The power model computes instantaneous match-line power per cycle according to:
 
 $$P_{\text{total}} = P_{\text{leakage}} + \left( \sum_{i=0}^{\text{DEPTH}-1} \text{LineMismatches}_i \right) \times E_{\text{mismatch-factor}}$$
 
-Where empirical model coefficients are defined as:
+Where empirical model coefficients are dynamically injected:
 * Static Base Leakage Floor ($P_{\text{leakage}}$): $0.002 \text{ mW}$ ($2 \ \mu\text{W}$)
 * Dynamic Mismatch Energy Coefficient ($E_{\text{mismatch-factor}}$): $0.015 \text{ mW per mismatched bit}$
 
@@ -146,209 +386,99 @@ where $T_{\text{clk}} = 10 \text{ ns}$ ($100 \text{ MHz}$ clock frequency).
 ```text
 sysc-cam-power/
 ├── Backend/
-│   ├── cam_power_model.h         # SystemC Module Class Interface & Port Declarations
+│   ├── cam_power_model.h         # Parameterized C++ Template Header & Port Declarations
 │   ├── cam_power_model.cpp       # Bitwise XOR Match Logic & JSON Exporter Implementation
-│   ├── main.cpp                  # Simulation Testbench Suite & Command Parser
-│   ├── run_sim.bat               # Windows Command Line Launcher
-│   ├── Makefile                  # GCC/g++ MinGW Build Automation File
-│   ├── CMakeLists.txt            # CMake Cross-Platform Build File
-│   ├── sim.exe                   # Compiled SystemC Binary Executable
-│   ├── cam_trace.vcd             # Value Change Dump Signal Waveform File
-│   └── simulation_data.json      # SystemC Cycle-by-Cycle JSON Trace Dataset
+│   ├── main.cpp                  # 10-Channel Instrumented Testbench & 5 Scenarios
+│   ├── run_sim.bat               # Windows Batch Simulation Launcher
+│   ├── Makefile                  # GCC/g++ MinGW Automated Build File
+│   ├── CMakeLists.txt            # CMake Cross-Platform Build Configuration
+│   ├── sim.exe                   # Compiled SystemC 3.0.2 Binary Executable
+│   ├── cam_trace.vcd             # Value Change Dump Waveform Signal Trace
+│   └── simulation_data.json      # Structured Multi-Cycle State Telemetry
 │
 ├── Frontend/
 │   ├── index.html                # Visual Workbench Dashboard HTML Structure
-│   ├── style.css                 # Dark EDA Glassmorphic Styling System
-│   ├── app.js                    # UI Interactivity, Hardware Matrix & Playback Engine
+│   ├── style.css                 # Dark Glassmorphic Design System & Micro-animations
+│   ├── app.js                    # UI Controller, Hardware Matrix & Playback Engine
 │   └── server.js                 # Node.js HTTP Server & SystemC Execution Gateway
 │
 ├── Screenshots/
 │   ├── backend.png               # SystemC C++ Simulation Execution Terminal Capture
 │   └── frontend.png              # EDA Web Visual Workbench Dashboard Interface Capture
 │
-├── run_web.bat                   # Top-Level One-Click Launch Script
+├── run_web.bat                   # Top-Level One-Click Launch Script (Keeps Log Open)
 ├── LICENSE                       # Project License File
 └── README.md                     # Technical System Documentation
 ```
 
 ---
 
-## Backend Implementation (`Backend/`)
+## Part 4: Simulation Verification & Test Scenarios
 
-### 1. Header Interface (`cam_power_model.h`)
-Defines the `CAM_Power_Model` SystemC module inheriting from `sc_module`.
+The testbench (`main.cpp`) exercises five verification scenarios designed to validate associative search, power scaling, direct writes, and indirect writes:
 
-```cpp
-SC_MODULE(CAM_Power_Model) {
-    // Port Inputs
-    sc_in<bool>               clk;
-    sc_in<bool>               enable;
-    sc_in<bool>               write_en;
-    sc_in<sc_uint<4>>         write_addr;
-    sc_in<sc_uint<CAM_WIDTH>> search_pattern;
-    sc_in<sc_uint<CAM_WIDTH>> write_data;
+| Test Case | Addressing Mode | Operation | Pattern / Input | Target / Effective Address | Mismatches | Result | Instant Power |
+| :--- | :--- | :--- | :--- | :--- | :-: | :-: | :-: |
+| **TC1** | **Associative** | Search | `0xA5A5` | Resolves to Index 0 | 21 bits | **HIT** | 0.317 mW |
+| **TC2** | **Associative** | Search | `0x5A5A` | No match across array | 139 bits | **PEAK MISS** | 2.087 mW |
+| **TC3** | **Direct Write** | Write | `0x1234` | $EA = \text{write\_addr} = 3$ | N/A | **WRITE** | 0.002 mW |
+| **TC4** | **Indirect Write**| Write | `0xDEAD` | $EA = \text{Base}(2) + \text{Offset}(3) = 5$ | N/A | **WRITE** | 0.002 mW |
+| **TC5** | **Associative** | Search | `0xDEAD` | Resolves to Index 5 | 68 bits | **HIT** | 1.022 mW |
 
-    // Port Outputs
-    sc_out<bool>              match_found;
-    sc_out<sc_uint<4>>        match_addr;
-    sc_out<double>            estimated_power_mw;
-
-    // Internal Storage & History
-    sc_uint<CAM_WIDTH>        cam_array[CAM_DEPTH];
-    std::vector<CycleData>    cycle_history;
-    
-    // Process Method & JSON Exporter
-    void cam_operation();
-    void export_json(const std::string& filename) const;
-    
-    SC_HAS_PROCESS(CAM_Power_Model);
-    CAM_Power_Model(sc_module_name name);
-};
-```
-
-### 2. Module Logic (`cam_power_model.cpp`)
-- **Clock Gating**: When `enable = false`, dynamic execution is bypassed, outputs are zeroed, and power drops to $0.0 \text{ mW}$.
-- **Memory Write**: When `write_en = true`, the data at `write_addr` is updated in `cam_array`, and power reports base leakage ($0.002 \text{ mW}$).
-- **Parallel Search**: Evaluates XOR match lines for all 10 entries simultaneously, calculates bit mismatches, sets match priority, computes power via the empirical equation, and pushes structured cycle data to `cycle_history`.
-- **JSON Exporter**: Serializes memory array snapshots, mismatch arrays, hit/miss flags, power values, and cumulative energy into `simulation_data.json`.
-
----
-
-## Frontend Implementation (`Frontend/`)
-
-### 1. Dashboard Layout (`index.html`)
-Presents a multi-column EDA dashboard containing:
-- **Navigation & Scenario Selector**: Segmented toolbar with preset testcase shortcuts (TC1 through TC5), live SystemC kernel activity indicators, and clock frequency display (100 MHz, Tclk = 10 ns).
-- **Simulation Control Panel**: First, Previous, Play/Pause, Next, Last playback buttons, speed selection, and cycle counter.
-- **ESL Power & Energy Engine**: Radial SVG power arc gauge displaying instantaneous power (mW) and cumulative energy (microjoules), paired with a static base leakage vs dynamic mismatch dissipation breakdown bar.
-- **10 x 16 CAM Array Matrix**: Visual hardware array displaying 160 flip-flop storage cells with bitwise XOR evaluation, stored hex representations, bit mismatch counts, and capacitive match-line status badges.
-- **Live Command Generator**: Parameterized input panel allowing engineers to select operation mode (Search or Write), input 16-bit hex patterns (e.g., 0xA5A5, 0xDEAD), and execute simulations live against the SystemC backend.
-- **Kernel Telemetry Console**: Real-time SystemC trace stream with formatted timestamped logs, clipboard copy, and buffer reset controls.
-
-### 2. Interactivity & Visualization Engine (`app.js`)
-- Reads and parses `simulation_data.json` exported by the SystemC backend.
-- Dynamically updates memory row DOM elements, bitwise match highlighting (Emerald `#10b981` for match, Crimson `#f43f5e` for mismatch, Cyan `#06b6d4` for prioritized HIT match line).
-- Synchronizes instantaneous power calculations, cumulative energy metrics, and simulation playback states.
-- Hardens hex input validation against malformed strings, stripping prefixes and clamping to 16-bit range.
-
-### 3. Server Bridge Gateway (`server.js`)
-A Node.js HTTP server configured to:
-- Serve static web assets (`index.html`, `style.css`, `app.js`).
-- Serve `simulation_data.json` from `Backend/`.
-- Provide `POST /api/simulate` and `POST /api/recompile` REST endpoints to trigger backend `sim.exe` execution asynchronously.
-
----
-
-## Build, Compilation, and Execution
-
-### Prerequisites
-- **Compiler**: GCC / MinGW g++ with C++17 support.
-- **SystemC Library**: SystemC 2.3.x or 3.0.x installed (default path: `C:/systemc`).
-- **Runtime Environment**: Node.js v14+ (for Web Visual Workbench).
-
----
-
-### Option 1: Launch Interactive Web Visual Workbench (Recommended)
-
-To compile the SystemC backend, start the bridge server, and open the web dashboard in your default browser, run:
-
-```cmd
-.\run_web.bat
-```
-
-Alternatively, from the terminal:
-```bash
-# 1. Compile SystemC executable inside Backend/
-cd Backend
-g++ -std=c++17 -DSC_ALLOW_DEPRECATED_IEEE_API -I C:/systemc/include -L C:/systemc/lib main.cpp cam_power_model.cpp -lsystemc -o sim.exe
-
-# 2. Run simulation engine to generate initial trace dataset
-.\sim.exe --no-pause
-
-# 3. Launch Node server from project root
-cd ..
-node Frontend/server.js
-```
-Then navigate to `http://localhost:3000` in your web browser.
-
----
-
-### Option 2: Standalone Command-Line Simulation Mode
-
-To compile and run the SystemC simulation directly in the terminal:
-
-```cmd
-cd Backend
-.\run_sim.bat
-```
-
-Using standard `Makefile`:
-```bash
-cd Backend
-make
-make run
-```
-
-Using `CMake`:
-```bash
-cd Backend
-mkdir build && cd build
-cmake ..
-cmake --build .
-```
-
----
-
-## Simulation Verification & Test Cases
-
-The testbench (`main.cpp`) executes 5 verification scenarios:
-
-| Test Case | Scenario | Search Pattern | Target / Expected Result | Total Bit Mismatches | Instant Power |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Test Case 1** | Initial Search | `0xA5A5` | **HIT** at Index 0 | 21 bits | 0.317 mW |
-| **Test Case 2** | High-Mismatch Search | `0x5A5A` | **MISS** (No Match) | 139 bits | 2.087 mW |
-| **Test Case 3** | Memory Write | `0xDEAD` | Write `0xDEAD` to Index 5 | 0 bits (Write Cycle) | 0.002 mW |
-| **Test Case 4** | Verification Search | `0xDEAD` | **HIT** at Index 5 | 68 bits | 1.022 mW |
-| **Test Case 5** | Low-Mismatch Search | `0xA5A4` | **MISS** (1-bit diff from Index 0)| 26 bits | 0.392 mW |
-
-### Sample Terminal Simulation Report Output
+### SystemC Simulation Terminal Output Trace
 
 ```text
-SystemC 3.0.2-Accellera --- Aug  1 2026 08:17:32
-Copyright (c) 1996-2025 by all Contributors,
-ALL RIGHTS RESERVED
+        SystemC 3.0.2-Accellera --- Aug  1 2026 08:17:32
+        Copyright (c) 1996-2025 by all Contributors,
+        ALL RIGHTS RESERVED
+[CAM INIT] Dynamically loaded 10 entries into CAM array (10x16)
 
 Info: (I703) tracing timescale unit set: 1 ns (cam_trace.vcd)
 
-========================================================
-     SYSTEMC CAM POWER MODEL - SIMULATION STARTED        
-========================================================
+====================================================================
+     SYSTEMC ESL CAM POWER & ADDRESSING VERIFICATION TESTBENCH      
+====================================================================
+  Configuration      : 10 Entries x 16 Bits
+  Base Pointer Reg   : 2 (Indirect Addressing Base)
+  Static Leakage     : 0.002 mW
+  Dynamic Coefficient: 0.015 mW/mismatch-bit
+  Clock Frequency    : 100 MHz (Period: 10 ns)
+  SystemC Channels   : 10 Primitive Channels (sc_prim_channel)
+  Kernel Execution   : Evaluate-Update delta cycle phases enabled
+====================================================================
 
---- TEST CASE 1: Searching pattern 0xA5A5 (Expected HIT at Index 0) ---
-[CAM SEARCH] @0 s | Pattern: 0x0a5a5 | Result: HIT  | Addr: 0 | Bit Mismatches: 21 | Power: 0.317 mW
+--- TEST CASE 1: Associative Search for Pattern 0xA5A5 (Expected HIT at Index 0) ---
+    [Delta Cycle] Staging search_pattern=0xA5A5 -> evaluate phase -> update phase
+[CAM SEARCH] @0 s | Mode: ASSOCIATIVE (Content) | Pattern: 0x0a5a5 | Result: HIT  | Addr: 0 | Bit Mismatches: 21 | Power: 0.317 mW
 
---- TEST CASE 2: Searching pattern 0x5A5A (Expected High-Power MISS) ---
-[CAM SEARCH] @10 ns | Pattern: 0x05a5a | Result: MISS | Addr: -1 | Bit Mismatches: 139 | Power: 2.087 mW
+--- TEST CASE 2: Associative Search for Inverted Pattern 0x5A5A (Expected Peak MISS) ---
+    [Delta Cycle] Staging search_pattern=0x5A5A -> evaluate phase -> update phase
+[CAM SEARCH] @10 ns | Mode: ASSOCIATIVE (Content) | Pattern: 0x05a5a | Result: MISS | Addr: -1 | Bit Mismatches: 139 | Power: 2.087 mW
 
---- TEST CASE 3: Write 0xDEAD into CAM Index 5 ---
-[CAM WRITE] @20 ns | Addr: 5 | Data: 0x0dead
+--- TEST CASE 3: Direct Addressing Write (addr_mode_indirect=0, Write 0x1234 to Index 3) ---
+    [Addressing Math] Effective Address = write_addr = 3
+[CAM WRITE] @20 ns | Mode: DIRECT | Base: N/A | Offset: 3 | EffAddr: 3 | Data: 0x01234
 
---- TEST CASE 4: Re-search pattern 0xDEAD (Expected HIT at Index 5) ---
-[CAM SEARCH] @30 ns | Pattern: 0x0dead | Result: HIT  | Addr: 5 | Bit Mismatches: 68 | Power: 1.022 mW
+--- TEST CASE 4: Indirect Addressing Write (addr_mode_indirect=1, Base=2, Offset=3 -> Index 5) ---
+    [Addressing Math] Effective Address = Base(2) + Offset(3) = 5
+[CAM WRITE] @30 ns | Mode: INDIRECT (Base+Offset) | Base: 2 | Offset: 3 | EffAddr: 5 | Data: 0x0dead
 
---- TEST CASE 5: Searching pattern 0xA5A4 (Expected Low-Power MISS) ---
-[CAM SEARCH] @40 ns | Pattern: 0x0a5a4 | Result: MISS | Addr: -1 | Bit Mismatches: 26 | Power: 0.392 mW
+--- TEST CASE 5: Associative Search for 0xDEAD (Verifying Indirect Write HIT at Index 5) ---
+[CAM SEARCH] @40 ns | Mode: ASSOCIATIVE (Content) | Pattern: 0x0dead | Result: HIT  | Addr: 5 | Bit Mismatches: 68 | Power: 1.022 mW
 
 ========================================================
          ESL SYSTEMC CAM POWER ESTIMATION REPORT         
 ========================================================
   CAM Depth             : 10 entries
   CAM Bit Width         : 16 bits
-  Total Search Cycles   : 4
+  Base Leakage (P_leak) : 0.002 mW
+  Mismatch Factor (E_m) : 0.015 mW/bit
+  Base Pointer Register : 2
+  Total Search Cycles   : 3
   Total Hits            : 2
-  Total Misses          : 2
-  Hit Rate              : 50 %
-  Accumulated Energy    : 3.818e-05 mJ
+  Total Misses          : 1
+  Hit Rate              : 66.6667 %
+  Accumulated Energy    : 3.426e-05 mJ
 ========================================================
 
 [JSON EXPORT] Simulation trace data saved to 'simulation_data.json'
@@ -359,39 +489,21 @@ Info: (I703) tracing timescale unit set: 1 ns (cam_trace.vcd)
 
 ---
 
-## Visual Demonstration and Experimental Analysis
-
-This section presents the empirical validation of the Electronic System-Level (ESL) Content Addressable Memory (CAM) framework across both native simulation runtime and interactive graphical synthesis.
+## Visual Demonstration & Experimental Analysis
 
 ### Figure 1: SystemC C++ Simulation Engine Execution Trace
 
 ![SystemC C++ Simulation Execution Terminal](Screenshots/backend.png)
 
 #### Architectural Analysis of Backend Terminal Output
-
-Figure 1 captures the complete standalone console execution of the compiled native SystemC IEEE 1666 binary executable (`sim.exe`). The output validates functional correctness, timing synchronization, and algorithmic power modeling across five distinct operating phases:
-
-1. **Kernel Bootstrapping and Timescale Configuration:**
-   * The Accellera SystemC 3.0.2 proof-of-concept simulation kernel initializes successfully under Windows/MinGW.
-   * Standardized Value Change Dump (VCD) trace pointer creation assigns a $1 \text{ ns}$ timing resolution for hardware signal tracing (`cam_trace.vcd`).
-   * The CAM memory array initializes with baseline sequential words ranging from `0xA5A5` (Entry 0) through `0xA5AE` (Entry 9).
-
-2. **Cycle-by-Cycle Verification Diagnostics:**
-   * **Test Case 1 ($t = 0 \text{ s}$):** Search word `0xA5A5` targets entry 0. The internal priority encoder flags `Result: HIT` at `Addr: 0`. The remaining nine un-matched rows accumulate 21 total bit mismatches, yielding an instantaneous power calculation of $P = 0.002 + 21 \times 0.015 = 0.317 \text{ mW}$.
-   * **Test Case 2 ($t = 10 \text{ ns}$):** Search pattern `0x5A5A` evaluates against all ten stored words without finding a match (`Result: MISS`, `Addr: -1`). A cumulative sum of 139 bit mismatches across the array discharges all ten capacitive match-lines, generating the peak dynamic switching dissipation of $P = 0.002 + 139 \times 0.015 = 2.087 \text{ mW}$.
-   * **Test Case 3 ($t = 20 \text{ ns}$):** Write enable control is asserted (`write_en = true`), executing a synchronous write of `0xDEAD` into CAM Entry 5. Match-line sensing is bypassed during write cycles, reducing power strictly to the static baseline leakage floor of $0.002 \text{ mW}$ ($2 \ \mu\text{W}$).
-   * **Test Case 4 ($t = 30 \text{ ns}$):** Re-search of query `0xDEAD` validates that the in-situ memory update succeeded. The priority logic registers a verified `Result: HIT` at `Addr: 5`. The 68 bit differences across non-matching lines dissipate $P = 0.002 + 68 \times 0.015 = 1.022 \text{ mW}$.
-   * **Test Case 5 ($t = 40 \text{ ns}$):** Single-bit deviation vector `0xA5A4` (differing by exactly one bit from Entry 0) fails to match (`Result: MISS`, `Addr: -1`). The system registers 26 total bit mismatches, resulting in a low-power miss dissipation of $0.392 \text{ mW}$.
-
-3. **Cumulative Statistical Estimation Report:**
-   * **Array Dimensions:** 10 words deep $\times$ 16 bits wide ($160$ dual-rail comparator cells).
-   * **Operational Profile:** 4 search cycles, 1 memory write cycle.
-   * **Hit Rate Efficiency:** 2 hits out of 4 searches ($50.0\%$ empirical hit rate).
-   * **Accumulated Energy Consumption:** Total accumulated energy across all cycles equals $3.818 \times 10^{-5} \text{ mJ}$ ($38.18 \text{ nJ}$).
-
-4. **Structured Multi-Format Artifact Generation:**
-   * Structured JSON telemetry is serialized into `simulation_data.json` for consumption by the web visual workbench.
-   * Hardware signal transitions are committed into `cam_trace.vcd` for post-simulation waveform visualization in logic analyzer tools.
+Figure 1 captures the standalone console execution of the compiled native SystemC IEEE 1666 binary executable (`sim.exe`). The trace validates functional timing, channel updates, addressing calculations, and power modeling:
+1. **Dynamic Initialization & VCD Registration:** The simulation kernel allocates a $1 \text{ ns}$ VCD tracing resolution and dynamically loads the 10-entry memory vector without hardcoded values.
+2. **Associative Single-Cycle Matching (TC1):** At $t = 0 \text{ s}$, broadcast query `0xA5A5` resolves to physical Row 0 with 21 bit mismatches across unselected rows ($P = 0.317 \text{ mW}$).
+3. **Worst-Case Capacitive Discharge (TC2):** At $t = 10 \text{ ns}$, query `0x5A5A` produces 139 bit mismatches across all rows, demonstrating peak dynamic power of $2.087 \text{ mW}$.
+4. **Addressing Mode Verification (TC3 & TC4):**
+   * TC3 demonstrates **Direct Addressing** ($EA = 3$), writing `0x1234` into Row 3.
+   * TC4 demonstrates **Indirect Addressing** ($EA = \text{Base}(2) + \text{Offset}(3) = 5$), writing `0xDEAD` into Row 5. Both write operations exhibit base leakage floor consumption ($0.002 \text{ mW}$).
+5. **Content Verification (TC5):** Re-searching `0xDEAD` at $t = 40 \text{ ns}$ triggers an associative **HIT at Row 5**, confirming the indirect write succeeded.
 
 ---
 
@@ -400,60 +512,159 @@ Figure 1 captures the complete standalone console execution of the compiled nati
 ![Electronic Design Automation Web Workbench](Screenshots/frontend.png)
 
 #### Architectural Analysis of Frontend Dashboard Interface
-
-Figure 2 showcases the dark-mode Electronic Design Automation (EDA) visual dashboard operating at `http://localhost:3000`. The interface synthesizes hardware memory states, power calculations, and execution telemetry into an integrated supervisory display:
-
-1. **Preset Verification Scenario Navigation Toolbar:**
-   * Positioned along the top panel, segmented pill selectors provide one-click traversal across the five predefined test scenarios (TC1 through TC5).
-   * Test Case 5 (`TC5: 0xA5A4`) is captured in the active state, synchronously locking the cycle stepper to cycle 5 ($t = 40.0 \text{ ns}$) and updating all analytical panels.
-
-2. **Electronic System-Level (ESL) Power and Energy Engine:**
-   * **Radial Power Arc Meter:** High-precision SVG circular gauge rendering instantaneous power ($0.392 \text{ mW}$) in bold typography with total accumulated energy ($0.038 \ \mu\text{J}$) displayed beneath.
-   * **Dissipation Breakdown Bar:** A segmented horizontal meter decomposes instantaneous power into its two constitutive components: Static Base Leakage ($0.002 \text{ mW}$, amber) and Dynamic Switching Mismatch ($0.390 \text{ mW}$, emerald).
-   * **Hardware Telemetry Readouts:** Dedicated cards display the evaluated match state (`MISS (No Match)`) and the cumulative Hamming distance across all array entries ($26 \text{ bits}$).
-
-3. **10-Entry by 16-Bit CAM Hardware Array Matrix:**
-   * **16-Bit Broadcast Vector Banner:** The upper header displays query word `0xA5A4` alongside its full 16-bit binary decomposition (`1 0 1 0 0 1 0 1 1 0 1 0 0 1 0 0`).
-   * **Bitwise Comparator Matrix:** All 160 memory cells are rendered individually with clear visual distinction. Emerald cells denote bit matches (XOR = 0), while crimson cells highlight bit mismatches (XOR = 1).
-   * **Row-Level Analytical Columns:** For each entry (Row 0 through Row 9), the table displays stored hexadecimal contents, exact bit difference count, and capacitive match-line status (`DISCHARGED` across all rows due to the absence of a complete match).
-   * **In-Situ Write Persistence:** Row 5 visually demonstrates the memory write completed in Cycle 3, storing `0xDEAD` with 8 bit differences relative to query `0xA5A4`.
-
-4. **Live Command Generator & Kernel Telemetry Trace:**
-   * **Command Generator Panel:** Enables interactive specification of arbitrary 16-bit query patterns and write vectors for immediate execution in the SystemC kernel via asynchronous REST API calls.
-   * **Real-Time Simulation Kernel Trace:** A terminal-style console panel streams timestamped log lines directly from the backend simulation engine, providing verification engineers with immediate visibility into internal address resolution, mismatch distributions, and power metrics.
+Figure 2 showcases the dark-mode EDA visual dashboard operating at `http://localhost:3000`. The interface synthesizes hardware memory states, power calculations, and execution telemetry into an integrated supervisory display:
+1. **Scenario Navigation Toolbar:** Segmented pill selectors allow one-click traversal across test scenarios (TC1 through TC5) with live status badges.
+2. **ESL Power & Energy Engine:**
+   * Radial SVG gauge displays instantaneous power ($P_{\text{total}}$) alongside cumulative microjoules.
+   * Power breakdown bar visualizes static leakage floor (amber) versus dynamic match-line switching (emerald).
+3. **10 x 16 CAM Array Matrix:**
+   * 160 individual storage cells render bitwise XOR comparisons (emerald for match, crimson for mismatch).
+   * Match lines indicate capacitive discharge states (`DISCHARGED` vs `MATCH`).
+   * Reflects in-situ writes from TC3 and TC4 directly in the visual matrix.
+4. **Live Command Generator & Kernel Trace:** Allows interactive specification of custom search queries or memory writes with live REST triggering of `sim.exe`.
 
 ---
 
-## Waveform Tracing & Analysis
+## Waveform Tracing & Logic Analysis
 
-The simulation automatically logs value changes into `Backend/cam_trace.vcd` (Value Change Dump).
+Signal transitions across all 10 primitive channels are dumped into `Backend/cam_trace.vcd` (Value Change Dump).
 
-### Method 1: Online VCD Waveform Viewer (drom.io)
-1. Open the browser-based VCD viewer at [https://vc.drom.io/](https://vc.drom.io/).
-2. Drag and drop or upload the generated `Backend/cam_trace.vcd` file into the online viewer interface.
-3. Select signals (`clk`, `enable`, `write_en`, `search_pattern`, `match_found`, `match_addr`, `estimated_power_mw`) to render digital timing waveforms instantly without installing local software.
-
-### Method 2: Desktop Waveform Inspection via GTKWave
-1. Launch GTKWave desktop application.
-2. Select **File -> Open Trace** and open `Backend/cam_trace.vcd`.
-3. Expand the module tree under `SystemC -> CAM_Inst`.
-4. Select `clk`, `enable`, `write_en`, `search_pattern`, `match_found`, `match_addr`, and `estimated_power_mw`.
-5. Click **Append** and adjust zoom (`Ctrl + 0`) to view signal timing waveforms.
-
----
-
-## SystemC Design Constructs & Abstractions
-
-1. **`SC_MODULE`**: C++ macro defining a hardware component class derived from `sc_module`.
-2. **`sc_in<T>` / `sc_out<T>`**: Strongly typed hardware ports supporting SystemC data types (`sc_uint<N>`, `bool`, `double`).
-3. **`SC_METHOD`**: Concurrent process method triggered by signals in its sensitivity list. Unlike threads (`SC_THREAD`), `SC_METHOD` runs to completion without calling `wait()`, maximizing simulation throughput.
-4. **`sensitive << clk.pos()`**: Defines positive clock edge sensitivity for synchronous execution.
-5. **`sc_trace_file`**: Infrastructure for logging cycle-accurate VCD waveform dumps.
+### Inspection via GTKWave
+1. Launch GTKWave.
+2. Open `Backend/cam_trace.vcd` via **File -> Open Trace**.
+3. Under the `SystemC -> CAM_Inst` hierarchy, add the signals:
+   * `clk`
+   * `enable`, `write_en`, `addr_mode_indirect`
+   * `write_addr`, `match_addr`
+   * `search_pattern`, `write_data`
+   * `match_found`, `estimated_power_mw`
+4. Zoom to fit (`Ctrl + 0`) to inspect synchronous clock edges, delta cycle settling, and addressing mode transitions.
 
 ---
 
-## References
+## Part 5: Viva Defense & Live Code Modification Walkthrough
 
-1. Accellera Systems Initiative, *"SystemC Language Reference Manual (IEEE Std 1666-2011)"*, IEEE Standards Association.
-2. K. Pagiamtzis and A. Sheikholeslami, *"Content-addressable memory (CAM) circuits and architectures: A tutorial and survey"*, IEEE Journal of Solid-State Circuits, vol. 41, no. 3, pp. 712-727, March 2006.
-3. C. Zukowski and S. Y. Wang, *"Use of simulation tools for early power estimation in digital system-on-chip design"*, IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems, vol. 22, no. 9, pp. 1145-1158.
+This section provides step-by-step instructions to defend and modify the codebase live in front of the examination committee.
+
+### 1. Live Code Modification: Changing Word Width in Under 30 Seconds
+
+**Viva Prompt:** *"Demonstrate that your code is not hardcoded by resizing the CAM from 16-bit to 32-bit (or 128-bit IPv6)."*
+
+#### Step 1: Open `Backend/main.cpp`
+Change the template instantiation:
+```cpp
+// Change from 10 entries x 16 bits:
+CAM_Power_Model<10, 16> cam("CAM_Inst", 0.002, 0.015, 2);
+
+// To 10 entries x 32 bits:
+CAM_Power_Model<10, 32> cam("CAM_Inst", 0.002, 0.015, 2);
+```
+
+#### Step 2: Update Initial Vectors & Channels in `Backend/main.cpp`
+Update channel declarations:
+```cpp
+sc_signal<sc_uint<32>> search_pattern("search_pattern");
+sc_signal<sc_uint<32>> write_data("write_data");
+```
+Update the initialization vector:
+```cpp
+std::vector<sc_uint<32>> initial_contents = {
+    0xA5A50001, 0xA5A50002, 0xA5A50003, 0xA5A50004, 0xA5A50005,
+    0xA5A50006, 0xA5A50007, 0xA5A50008, 0xA5A50009, 0xA5A5000A
+};
+cam.load_initial_memory(initial_contents);
+```
+
+#### Step 3: Recompile and Run
+```cmd
+cd Backend
+g++ -std=c++17 -DSC_ALLOW_DEPRECATED_IEEE_API -I C:/systemc/include -L C:/systemc/lib main.cpp cam_power_model.cpp -lsystemc -o sim.exe
+.\sim.exe --no-pause
+```
+*Note: Explicit template instantiations for `10x32`, `10x64`, `16x32`, and `32x32` are pre-compiled in `cam_power_model.cpp`.*
+
+---
+
+### 2. Live Addressing Mode Switching
+
+**Viva Prompt:** *"How do you toggle between Direct and Indirect addressing in a single cycle?"*
+
+In `Backend/main.cpp`:
+* To execute a **Direct Write** to Index 7:
+  ```cpp
+  addr_mode_indirect.write(false); // Direct Mode
+  write_addr.write(7);             // Effective Address = 7
+  write_data.write(0xBEEF);
+  write_en.write(true);
+  ```
+* To execute an **Indirect Write** with Base Pointer = 2 to resolve to Index 7:
+  ```cpp
+  addr_mode_indirect.write(true);  // Indirect Mode
+  write_addr.write(5);             // Offset = 5 (EA = Base 2 + Offset 5 = 7)
+  write_data.write(0xBEEF);
+  write_en.write(true);
+  ```
+
+---
+
+### 3. Key Viva Questions & Model Answers
+
+#### Q1: What is a SystemC Delta Cycle ($\delta$-cycle) and why is the Evaluate-Update phase essential?
+> **Answer:** A delta cycle represents zero simulation time ($\Delta t = 0$) during which concurrent hardware processes execute to evaluate combinational logic and signal settling. The Evaluate-Update phase decouples reading from writing:
+> - In the **Evaluate Phase**, processes execute and read current signal values (`m_cur_val`), queueing proposed writes in staging buffers (`m_new_val`) via `request_update()`.
+> - In the **Update Phase**, the kernel commits `m_cur_val = m_new_val`.
+> This two-phase mechanism eliminates race conditions arising from arbitrary C++ thread execution orders, guaranteeing deterministic simulation identical to physical clock-synchronized silicon.
+
+#### Q2: Why is `SC_METHOD` preferred over `SC_THREAD` in the CAM module?
+> **Answer:** `SC_METHOD` executes from entry to exit without maintaining an execution context or calling `wait()`. Because it does not incur operating-system context switching overhead, `SC_METHOD` executes significantly faster than `SC_THREAD`. For a synchronous memory block whose state updates strictly on the positive clock edge (`sensitive << clk.pos()`), `SC_METHOD` provides maximum simulation throughput.
+
+#### Q3: Why does CAM dynamic power depend on the number of bit mismatches?
+> **Answer:** In physical CMOS CAM cells (e.g., 10T NOR-type CAM), match-lines are pre-charged high to $V_{DD}$ during the pre-charge phase. During the evaluation phase, each memory cell contains an XOR/XNOR comparator coupled to a pull-down discharge transistor. Any bit mismatch turns on a discharge path, draining the match-line capacitance to ground and consuming $C V_{DD}^2 f$ dynamic energy. A search pattern causing widespread mismatches across many rows discharges multiple match-lines, resulting in peak dynamic power.
+
+#### Q4: What is the architectural difference between Primitive Channels and Hierarchical Channels?
+> **Answer:** 
+> - **Primitive Channels (`sc_prim_channel`):** Directly participate in the kernel's evaluate-update delta cycle protocol (`request_update()` and `update()`). They contain no internal hierarchy or processes (e.g., `sc_signal<T>`, `sc_clock`, `sc_fifo<T>`).
+> - **Hierarchical Channels (`sc_channel` / `sc_module`):** Contain internal sub-modules, processes (`SC_METHOD`/`SC_THREAD`), and ports. They implement complex transaction interfaces (e.g., TLM-2.0 bus routers, crossbars, protocol bridges).
+
+#### Q5: Why perform ESL power modeling in SystemC rather than RTL in Verilog?
+> **Answer:** SystemC operates at the Electronic System-Level (ESL), simulating at orders of magnitude higher speed ($100\times$ to $10,000\times$) than RTL event simulators. It allows architects to explore algorithmic design tradeoffs, cache sizing, clock-gating thresholds, and software driver interactions months before RTL synthesis and place-and-route netlists are available.
+
+---
+
+## Build, Compilation, and Execution
+
+### Prerequisites
+- **Compiler**: GCC / MinGW g++ with C++17 support.
+- **SystemC**: SystemC 2.3.x or 3.0.x installed at `C:/systemc` (or adjust `-I` and `-L` paths).
+- **Node.js**: v14+ (for Web Visual Workbench).
+
+### Launch Options
+
+#### Option 1: One-Click Web Visual Workbench (Recommended)
+```cmd
+.\run_web.bat
+```
+*Compiles the SystemC backend, launches the Node.js bridge server, keeps the console log active, and launches the browser at `http://localhost:3000`.*
+
+#### Option 2: Standalone Command-Line Simulation
+```cmd
+cd Backend
+g++ -std=c++17 -DSC_ALLOW_DEPRECATED_IEEE_API -I C:/systemc/include -L C:/systemc/lib main.cpp cam_power_model.cpp -lsystemc -o sim.exe
+.\sim.exe --no-pause
+```
+
+#### Option 3: Using Makefile
+```cmd
+cd Backend
+make
+make run
+```
+
+---
+
+## Academic References
+
+1. **Base Paper:** I-Jui Tung, Che-Wei Chou, and Jing-Ying Chen, *"A SystemC Content Addressable Memory Power Estimation Tool for Early Design Verification"*, **IEEE International Conference on Systems, Man, and Cybernetics (SMC)**, pp. 2970-2975, 2010.
+2. Accellera Systems Initiative, *"SystemC Language Reference Manual (IEEE Std 1666-2011)"*, IEEE Standards Association, New York, 2012.
+3. K. Pagiamtzis and A. Sheikholeslami, *"Content-addressable memory (CAM) circuits and architectures: A tutorial and survey"*, **IEEE Journal of Solid-State Circuits**, vol. 41, no. 3, pp. 712-727, March 2006.
+4. C. Zukowski and S. Y. Wang, *"Use of simulation tools for early power estimation in digital system-on-chip design"*, **IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems**, vol. 22, no. 9, pp. 1145-1158, 2003.

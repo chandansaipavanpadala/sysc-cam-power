@@ -11,7 +11,7 @@ INCLUDES  = -I$(SYSTEMC)/include
 LDFLAGS   = -L$(SYSTEMC)/lib -lsystemc
 
 # Target & Source Files
-TARGET    = C:/MinGW/bin/sim.exe
+TARGET    = sim.exe
 SRCS      = main.cpp cam_power_model.cpp
 OBJS      = $(SRCS:.cpp=.o)
 

@@ -7,9 +7,9 @@
 const PRESET_TEST_CASES = [
     { id: 'TC1', name: 'TC1: 0xA5A5', op: 'SEARCH', pattern: 0xA5A5, desc: 'Exact Match @ Row 0 &bull; 0.317 mW' },
     { id: 'TC2', name: 'TC2: 0x5A5A', op: 'SEARCH', pattern: 0x5A5A, desc: '139b Miss &bull; 2.087 mW' },
-    { id: 'TC3', name: 'TC3: Write 0xDEAD', op: 'WRITE', writeAddr: 5, writeData: 0xDEAD, desc: 'Row 5 &bull; 0.002 mW' },
-    { id: 'TC4', name: 'TC4: 0xDEAD', op: 'SEARCH', pattern: 0xDEAD, desc: 'Hit @ Row 5 &bull; 1.022 mW' },
-    { id: 'TC5', name: 'TC5: 0xA5A4', op: 'SEARCH', pattern: 0xA5A4, desc: '26b Miss &bull; 0.392 mW' }
+    { id: 'TC3', name: 'TC3: Direct Write', op: 'WRITE', writeAddr: 3, writeData: 0x1234, desc: 'Direct @ Row 3 &bull; 0.002 mW' },
+    { id: 'TC4', name: 'TC4: Indirect Write', op: 'WRITE', writeAddr: 5, writeData: 0xDEAD, desc: 'Indirect Base 2+3 &bull; 0.002 mW' },
+    { id: 'TC5', name: 'TC5: 0xDEAD', op: 'SEARCH', pattern: 0xDEAD, desc: 'Hit @ Row 5 &bull; 1.022 mW' }
 ];
 
 // Application State
@@ -291,6 +291,30 @@ function loadFallbackDataset() {
                 cycle: 3,
                 time_ns: 20,
                 op_type: "WRITE",
+                addr_mode_indirect: false,
+                base_pointer: 2,
+                write_addr_offset: 3,
+                effective_addr: 3,
+                search_pattern: "0x5a5a",
+                search_pattern_dec: 23130,
+                write_data: "0x1234",
+                write_addr: 3,
+                hit: false,
+                hit_addr: -1,
+                total_mismatches: 0,
+                power_mw: 0.002,
+                accumulated_energy_mj: 0.00002404,
+                cam_snapshot: [42405, 42406, 42407, 4660, 42409, 42410, 42411, 42412, 42413, 42414],
+                line_mismatches: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            },
+            {
+                cycle: 4,
+                time_ns: 30,
+                op_type: "WRITE",
+                addr_mode_indirect: true,
+                base_pointer: 2,
+                write_addr_offset: 3,
+                effective_addr: 5,
                 search_pattern: "0x5a5a",
                 search_pattern_dec: 23130,
                 write_data: "0xdead",
@@ -300,36 +324,28 @@ function loadFallbackDataset() {
                 total_mismatches: 0,
                 power_mw: 0.002,
                 accumulated_energy_mj: 0.00002404,
-                cam_snapshot: [42405, 42406, 42407, 42408, 42409, 57005, 42411, 42412, 42413, 42414],
+                cam_snapshot: [42405, 42406, 42407, 4660, 42409, 57005, 42411, 42412, 42413, 42414],
                 line_mismatches: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            },
-            {
-                cycle: 4,
-                time_ns: 30,
-                op_type: "SEARCH",
-                search_pattern: "0xdead",
-                search_pattern_dec: 57005,
-                hit: true,
-                hit_addr: 5,
-                total_mismatches: 68,
-                power_mw: 1.022,
-                accumulated_energy_mj: 0.00003426,
-                cam_snapshot: [42405, 42406, 42407, 42408, 42409, 57005, 42411, 42412, 42413, 42414],
-                line_mismatches: [7, 9, 8, 8, 7, 0, 8, 7, 6, 8]
             },
             {
                 cycle: 5,
                 time_ns: 40,
                 op_type: "SEARCH",
-                search_pattern: "0xa5a4",
-                search_pattern_dec: 42404,
-                hit: false,
-                hit_addr: -1,
-                total_mismatches: 26,
-                power_mw: 0.392,
-                accumulated_energy_mj: 0.00003818,
-                cam_snapshot: [42405, 42406, 42407, 42408, 42409, 57005, 42411, 42412, 42413, 42414],
-                line_mismatches: [1, 1, 2, 2, 3, 8, 4, 1, 2, 2]
+                addr_mode_indirect: false,
+                base_pointer: 2,
+                write_addr_offset: 3,
+                effective_addr: 0,
+                search_pattern: "0xdead",
+                search_pattern_dec: 57005,
+                write_data: "0xdead",
+                write_addr: 5,
+                hit: true,
+                hit_addr: 5,
+                total_mismatches: 68,
+                power_mw: 1.022,
+                accumulated_energy_mj: 0.00003426,
+                cam_snapshot: [42405, 42406, 42407, 4660, 42409, 57005, 42411, 42412, 42413, 42414],
+                line_mismatches: [7, 9, 8, 8, 7, 0, 8, 7, 6, 8]
             }
         ]
     };
@@ -351,7 +367,13 @@ function jumpToTestCase(tcIndex) {
 
     // Smart Matching by Operation & Pattern
     if (tc.op === 'WRITE') {
-        targetIndex = cycles.findIndex(c => c.op_type === 'WRITE' && (c.write_addr === tc.writeAddr || (c.write_data && c.write_data.toLowerCase().includes('dead'))));
+        if (tc.id === 'TC3') {
+            targetIndex = cycles.findIndex(c => c.op_type === 'WRITE' && (c.write_addr === 3 || (c.write_data && c.write_data.toLowerCase().includes('1234'))));
+        } else if (tc.id === 'TC4') {
+            targetIndex = cycles.findIndex(c => c.op_type === 'WRITE' && (c.write_addr === 5 || (c.write_data && c.write_data.toLowerCase().includes('dead'))));
+        } else {
+            targetIndex = cycles.findIndex(c => c.op_type === 'WRITE' && c.write_addr === tc.writeAddr);
+        }
     } else {
         const hexLow = '0x' + tc.pattern.toString(16).toLowerCase();
         targetIndex = cycles.findIndex(c => c.op_type === 'SEARCH' && (

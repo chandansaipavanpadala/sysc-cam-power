@@ -1,5 +1,5 @@
 $date
-     Sep 30, 2026       19:47:15
+     Oct 14, 2026       14:58:46
 $end
 
 $version
@@ -14,12 +14,13 @@ $scope module SystemC $end
 $var wire    1  aaaaa  clk       $end
 $var wire    1  aaaab  enable       $end
 $var wire    1  aaaac  write_en       $end
-$var wire    4  aaaad  write_addr [3:0]  $end
-$var wire   16  aaaae  search_pattern [15:0]  $end
-$var wire   16  aaaaf  write_data [15:0]  $end
-$var wire    1  aaaag  match_found       $end
-$var wire    4  aaaah  match_addr [3:0]  $end
-$var real    1  aaaai  estimated_power_mw       $end
+$var wire    1  aaaad  addr_mode_indirect       $end
+$var wire   32  aaaae  write_addr [31:0]  $end
+$var wire   16  aaaaf  search_pattern [15:0]  $end
+$var wire   16  aaaag  write_data [15:0]  $end
+$var wire    1  aaaah  match_found       $end
+$var wire   32  aaaai  match_addr [31:0]  $end
+$var real    1  aaaaj  estimated_power_mw       $end
 $upscope $end
 $enddefinitions  $end
 
@@ -31,12 +32,13 @@ $dumpvars
 1aaaaa
 1aaaab
 0aaaac
-b0 aaaad
-b1010010110100101 aaaae
-b0 aaaaf
-1aaaag
-b0 aaaah
-r0.317 aaaai
+0aaaad
+b0 aaaae
+b1010010110100101 aaaaf
+b0 aaaag
+1aaaah
+b0 aaaai
+r0.317 aaaaj
 $end
 
 #5
@@ -44,9 +46,9 @@ $end
 
 #10
 1aaaaa
-b101101001011010 aaaae
-0aaaag
-r2.087 aaaai
+b101101001011010 aaaaf
+0aaaah
+r2.087 aaaaj
 
 #15
 0aaaaa
@@ -54,30 +56,29 @@ r2.087 aaaai
 #20
 1aaaaa
 1aaaac
-b101 aaaad
-b1101111010101101 aaaaf
-r0.002 aaaai
+b11 aaaae
+b1001000110100 aaaag
+r0.002 aaaaj
 
 #25
 0aaaaa
 
 #30
 1aaaaa
-0aaaac
-b1101111010101101 aaaae
-1aaaag
-b101 aaaah
-r1.022 aaaai
+1aaaad
+b1101111010101101 aaaag
 
 #35
 0aaaaa
 
 #40
 1aaaaa
-b1010010110100100 aaaae
-0aaaag
-b0 aaaah
-r0.392 aaaai
+0aaaac
+0aaaad
+b1101111010101101 aaaaf
+1aaaah
+b101 aaaai
+r1.022 aaaaj
 
 #45
 0aaaaa
