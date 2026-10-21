@@ -16,9 +16,8 @@ An Electronic System-Level (ESL) hardware modeling and simulation framework for 
 9. [Part 4: Simulation Verification & Test Scenarios](#part-4-simulation-verification--test-scenarios)
 10. [Visual Demonstration & Experimental Analysis](#visual-demonstration--experimental-analysis)
 11. [Waveform Tracing & Logic Analysis](#waveform-tracing--logic-analysis)
-12. [Part 5: Viva Defense & Live Code Modification Walkthrough](#part-5-viva-defense--live-code-modification-walkthrough)
-13. [Build, Compilation, and Execution](#build-compilation-and-execution)
-14. [Academic References](#academic-references)
+12. [Build, Compilation, and Execution](#build-compilation-and-execution)
+13. [Academic References](#academic-references)
 
 ---
 
@@ -539,95 +538,6 @@ Signal transitions across all 10 primitive channels are dumped into `Backend/cam
    * `search_pattern`, `write_data`
    * `match_found`, `estimated_power_mw`
 4. Zoom to fit (`Ctrl + 0`) to inspect synchronous clock edges, delta cycle settling, and addressing mode transitions.
-
----
-
-## Part 5: Viva Defense & Live Code Modification Walkthrough
-
-This section provides step-by-step instructions to defend and modify the codebase live in front of the examination committee.
-
-### 1. Live Code Modification: Changing Word Width in Under 30 Seconds
-
-**Viva Prompt:** *"Demonstrate that your code is not hardcoded by resizing the CAM from 16-bit to 32-bit (or 128-bit IPv6)."*
-
-#### Step 1: Open `Backend/main.cpp`
-Change the template instantiation:
-```cpp
-// Change from 10 entries x 16 bits:
-CAM_Power_Model<10, 16> cam("CAM_Inst", 0.002, 0.015, 2);
-
-// To 10 entries x 32 bits:
-CAM_Power_Model<10, 32> cam("CAM_Inst", 0.002, 0.015, 2);
-```
-
-#### Step 2: Update Initial Vectors & Channels in `Backend/main.cpp`
-Update channel declarations:
-```cpp
-sc_signal<sc_uint<32>> search_pattern("search_pattern");
-sc_signal<sc_uint<32>> write_data("write_data");
-```
-Update the initialization vector:
-```cpp
-std::vector<sc_uint<32>> initial_contents = {
-    0xA5A50001, 0xA5A50002, 0xA5A50003, 0xA5A50004, 0xA5A50005,
-    0xA5A50006, 0xA5A50007, 0xA5A50008, 0xA5A50009, 0xA5A5000A
-};
-cam.load_initial_memory(initial_contents);
-```
-
-#### Step 3: Recompile and Run
-```cmd
-cd Backend
-g++ -std=c++17 -DSC_ALLOW_DEPRECATED_IEEE_API -I C:/systemc/include -L C:/systemc/lib main.cpp cam_power_model.cpp -lsystemc -o sim.exe
-.\sim.exe --no-pause
-```
-*Note: Explicit template instantiations for `10x32`, `10x64`, `16x32`, and `32x32` are pre-compiled in `cam_power_model.cpp`.*
-
----
-
-### 2. Live Addressing Mode Switching
-
-**Viva Prompt:** *"How do you toggle between Direct and Indirect addressing in a single cycle?"*
-
-In `Backend/main.cpp`:
-* To execute a **Direct Write** to Index 7:
-  ```cpp
-  addr_mode_indirect.write(false); // Direct Mode
-  write_addr.write(7);             // Effective Address = 7
-  write_data.write(0xBEEF);
-  write_en.write(true);
-  ```
-* To execute an **Indirect Write** with Base Pointer = 2 to resolve to Index 7:
-  ```cpp
-  addr_mode_indirect.write(true);  // Indirect Mode
-  write_addr.write(5);             // Offset = 5 (EA = Base 2 + Offset 5 = 7)
-  write_data.write(0xBEEF);
-  write_en.write(true);
-  ```
-
----
-
-### 3. Key Viva Questions & Model Answers
-
-#### Q1: What is a SystemC Delta Cycle ($\delta$-cycle) and why is the Evaluate-Update phase essential?
-> **Answer:** A delta cycle represents zero simulation time ($\Delta t = 0$) during which concurrent hardware processes execute to evaluate combinational logic and signal settling. The Evaluate-Update phase decouples reading from writing:
-> - In the **Evaluate Phase**, processes execute and read current signal values (`m_cur_val`), queueing proposed writes in staging buffers (`m_new_val`) via `request_update()`.
-> - In the **Update Phase**, the kernel commits `m_cur_val = m_new_val`.
-> This two-phase mechanism eliminates race conditions arising from arbitrary C++ thread execution orders, guaranteeing deterministic simulation identical to physical clock-synchronized silicon.
-
-#### Q2: Why is `SC_METHOD` preferred over `SC_THREAD` in the CAM module?
-> **Answer:** `SC_METHOD` executes from entry to exit without maintaining an execution context or calling `wait()`. Because it does not incur operating-system context switching overhead, `SC_METHOD` executes significantly faster than `SC_THREAD`. For a synchronous memory block whose state updates strictly on the positive clock edge (`sensitive << clk.pos()`), `SC_METHOD` provides maximum simulation throughput.
-
-#### Q3: Why does CAM dynamic power depend on the number of bit mismatches?
-> **Answer:** In physical CMOS CAM cells (e.g., 10T NOR-type CAM), match-lines are pre-charged high to $V_{DD}$ during the pre-charge phase. During the evaluation phase, each memory cell contains an XOR/XNOR comparator coupled to a pull-down discharge transistor. Any bit mismatch turns on a discharge path, draining the match-line capacitance to ground and consuming $C V_{DD}^2 f$ dynamic energy. A search pattern causing widespread mismatches across many rows discharges multiple match-lines, resulting in peak dynamic power.
-
-#### Q4: What is the architectural difference between Primitive Channels and Hierarchical Channels?
-> **Answer:** 
-> - **Primitive Channels (`sc_prim_channel`):** Directly participate in the kernel's evaluate-update delta cycle protocol (`request_update()` and `update()`). They contain no internal hierarchy or processes (e.g., `sc_signal<T>`, `sc_clock`, `sc_fifo<T>`).
-> - **Hierarchical Channels (`sc_channel` / `sc_module`):** Contain internal sub-modules, processes (`SC_METHOD`/`SC_THREAD`), and ports. They implement complex transaction interfaces (e.g., TLM-2.0 bus routers, crossbars, protocol bridges).
-
-#### Q5: Why perform ESL power modeling in SystemC rather than RTL in Verilog?
-> **Answer:** SystemC operates at the Electronic System-Level (ESL), simulating at orders of magnitude higher speed ($100\times$ to $10,000\times$) than RTL event simulators. It allows architects to explore algorithmic design tradeoffs, cache sizing, clock-gating thresholds, and software driver interactions months before RTL synthesis and place-and-route netlists are available.
 
 ---
 
