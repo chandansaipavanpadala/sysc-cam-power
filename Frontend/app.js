@@ -435,13 +435,26 @@ function synchronizeActiveTestCase(cycle, index) {
     // Check if current cycle matches any preset test case
     let activeTc = -1;
     if (cycle.op_type === 'WRITE') {
-        activeTc = 2; // TC3: Write 0xDEAD
+        const writeData = cycle.write_data ? parseInt(cycle.write_data, 16) : 0;
+        // TC4: Indirect Write (addr_mode_indirect == true, write_data == 0xDEAD, effective_addr == 5)
+        // TC3: Direct Write (addr_mode_indirect == false, write_data == 0x1234, effective_addr == 3)
+        if (cycle.addr_mode_indirect === true || writeData === 0xDEAD || cycle.effective_addr === 5 || cycle.write_addr === 5) {
+            activeTc = 3; // TC4: Indirect Write
+        } else if (cycle.addr_mode_indirect === false || writeData === 0x1234 || cycle.effective_addr === 3 || cycle.write_addr === 3) {
+            activeTc = 2; // TC3: Direct Write
+        } else {
+            activeTc = 2; // Default write fallback
+        }
     } else {
         const dec = cycle.search_pattern_dec || parseInt(cycle.search_pattern, 16);
-        if (dec === 0xA5A5) activeTc = 0;       // TC1
-        else if (dec === 0x5A5A) activeTc = 1;  // TC2
-        else if (dec === 0xDEAD) activeTc = 3;  // TC4
-        else if (dec === 0xA5A4) activeTc = 4;  // TC5
+        if (dec === 0xA5A5) activeTc = 0;       // TC1: 0xA5A5
+        else if (dec === 0x5A5A) activeTc = 1;  // TC2: 0x5A5A
+        else if (dec === 0xDEAD) activeTc = 4;  // TC5: 0xDEAD (Verification Hit @ Row 5)
+    }
+
+    // Direct fallback by cycle index if activeTc could not be resolved from pattern/data
+    if (activeTc === -1 && typeof index === 'number' && index >= 0 && index < PRESET_TEST_CASES.length) {
+        activeTc = index;
     }
 
     if (activeTc !== -1 && pills[activeTc]) {
