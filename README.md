@@ -213,7 +213,7 @@ Content Addressable Memory operates inversely to standard RAM. Instead of provid
 
 * **Mechanism:** The `search_pattern` is broadcast across all entries simultaneously.
 * **Evaluation:** Each entry performs a parallel bitwise XOR:
-  $$\text{MismatchMap}_i = \text{cam\_array}[i] \oplus \text{search\_pattern}$$
+  $$\text{MismatchMap}_i = \text{CamArray}[i] \oplus \text{SearchPattern}$$
 * **Hit Resolution:** If $\text{MismatchMap}_i = 0$, entry $i$ signals a match. The priority encoder returns the lowest matching index via `match_addr`.
 
 ### 2. Switchable Direct vs. Indirect Addressing Modes (Write Operations)
@@ -234,11 +234,11 @@ sc_in<bool> addr_mode_indirect; // 0 = Direct, 1 = Indirect
 
 #### Mode A: Direct Addressing (`addr_mode_indirect = 0`)
 The index supplied on `write_addr` directly specifies the target physical row:
-$$EA = \text{write\_addr}$$
+$$EA = \text{Address}$$
 
 #### Mode B: Indirect / Base-Offset Addressing (`addr_mode_indirect = 1`)
 The effective address is computed by adding the internal base pointer register to the offset provided on `write_addr`:
-$$EA = \text{base\_pointer\_reg} + \text{write\_addr}$$
+$$EA = \text{Base} + \text{Offset}$$
 
 ```text
                          +-----------------------+
@@ -276,8 +276,8 @@ if (effective_addr < CAM_DEPTH) {
 | Addressing Mode | Operational Context | Address Source | Effective Address Formula | Cycle Latency |
 | :--- | :--- | :--- | :--- | :--- |
 | **Associative (Content)** | Search / Lookup | Broadcast `search_pattern` | Resolved via Priority Encoder | 1 Clock Cycle ($O(1)$) |
-| **Direct Addressing** | Memory Write | Input port `write_addr` | $EA = \text{write\_addr}$ | 1 Clock Cycle |
-| **Indirect (Base+Offset)**| Relocatable Write | `base_pointer_reg` + `write_addr` | $EA = \text{base\_pointer\_reg} + \text{write\_addr}$ | 1 Clock Cycle |
+| **Direct Addressing** | Memory Write | Input port `write_addr` | $EA = \text{Address}$ | 1 Clock Cycle |
+| **Indirect (Base+Offset)**| Relocatable Write | `base_pointer_reg` + `write_addr` | $EA = \text{Base} + \text{Offset}$ | 1 Clock Cycle |
 
 ---
 
@@ -353,7 +353,7 @@ SystemC guarantees cycle-accurate, deterministic hardware behavior identical to 
 ### 1. Parallel Match-Line Bitwise XOR Evaluation
 In a binary Content Addressable Memory, each entry compares all bits simultaneously against the query `search_pattern` using bitwise XOR logic:
 
-$$\text{MismatchMap}_i = \text{cam\_array}[i] \oplus \text{search\_pattern}$$
+$$\text{MismatchMap}_i = \text{CamArray}[i] \oplus \text{SearchPattern}$$
 
 For each bit position $b \in \{0, \dots, \text{WIDTH}-1\}$, the total bit mismatches for line $i$ is calculated as:
 
@@ -421,7 +421,7 @@ The testbench (`main.cpp`) exercises five verification scenarios designed to val
 | :--- | :--- | :--- | :--- | :--- | :-: | :-: | :-: |
 | **TC1** | **Associative** | Search | `0xA5A5` | Resolves to Index 0 | 21 bits | **HIT** | 0.317 mW |
 | **TC2** | **Associative** | Search | `0x5A5A` | No match across array | 139 bits | **PEAK MISS** | 2.087 mW |
-| **TC3** | **Direct Write** | Write | `0x1234` | $EA = \text{write\_addr} = 3$ | N/A | **WRITE** | 0.002 mW |
+| **TC3** | **Direct Write** | Write | `0x1234` | $EA = \text{Address}(3) = 3$ | N/A | **WRITE** | 0.002 mW |
 | **TC4** | **Indirect Write**| Write | `0xDEAD` | $EA = \text{Base}(2) + \text{Offset}(3) = 5$ | N/A | **WRITE** | 0.002 mW |
 | **TC5** | **Associative** | Search | `0xDEAD` | Resolves to Index 5 | 68 bits | **HIT** | 1.022 mW |
 
