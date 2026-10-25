@@ -1,6 +1,14 @@
 # SystemC Content Addressable Memory (CAM) Power Estimation & Web Visualization Workbench
 
+[![Deploy Web Visualizer to GitHub Pages](https://github.com/chandansaipavanpadala/sysc-cam-power/actions/workflows/deploy.yml/badge.svg)](https://chandansaipavanpadala.github.io/sysc-cam-power/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-GitHub_Pages-2ea44f?logo=githubpages&logoColor=white)](https://chandansaipavanpadala.github.io/sysc-cam-power/)
+[![SystemC](https://img.shields.io/badge/SystemC-3.0.2%20IEEE%201666-00599C?logo=c%2B%2B&logoColor=white)](https://systemc.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An Electronic System-Level (ESL) hardware modeling and simulation framework for Content Addressable Memory (CAM) architectures. Built using SystemC (C++ IEEE 1666 standard) and an interactive web visual workbench, this tool provides architectural power estimation, bitwise match-line evaluation, configurable addressing modes (associative, direct, and indirect), SystemC channel instrumentation, VCD waveform tracing, and dynamic web visualization.
+
+> 🚀 **Live Interactive Web EDA Workbench**: Test the full-featured CAM visualizer directly in your browser with zero installation:  
+> 👉 **[https://chandansaipavanpadala.github.io/sysc-cam-power/](https://chandansaipavanpadala.github.io/sysc-cam-power/)**
 
 ---
 
@@ -17,7 +25,8 @@ An Electronic System-Level (ESL) hardware modeling and simulation framework for 
 10. [Visual Demonstration & Experimental Analysis](#visual-demonstration--experimental-analysis)
 11. [Waveform Tracing & Logic Analysis](#waveform-tracing--logic-analysis)
 12. [Build, Compilation, and Execution](#build-compilation-and-execution)
-13. [Academic References](#academic-references)
+13. [Continuous Integration & Automated Deployment](#continuous-integration--automated-deployment)
+14. [Academic References](#academic-references)
 
 ---
 
@@ -384,6 +393,9 @@ where $T_{\text{clk}} = 10 \text{ ns}$ ($100 \text{ MHz}$ clock frequency).
 
 ```text
 sysc-cam-power/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml            # Automated GitHub Actions CI/CD Pages Deployment
 ├── Backend/
 │   ├── cam_power_model.h         # Parameterized C++ Template Header & Port Declarations
 │   ├── cam_power_model.cpp       # Bitwise XOR Match Logic & JSON Exporter Implementation
@@ -399,7 +411,8 @@ sysc-cam-power/
 │   ├── index.html                # Visual Workbench Dashboard HTML Structure
 │   ├── style.css                 # Dark Glassmorphic Design System & Micro-animations
 │   ├── app.js                    # UI Controller, Hardware Matrix & Playback Engine
-│   └── server.js                 # Node.js HTTP Server & SystemC Execution Gateway
+│   ├── server.js                 # Node.js HTTP Server & SystemC Execution Gateway
+│   └── simulation_data.json      # Bundled Dataset for Static & GitHub Pages Hosting
 │
 ├── Screenshots/
 │   ├── backend.png               # SystemC C++ Simulation Execution Terminal Capture
@@ -511,7 +524,7 @@ Figure 1 captures the standalone console execution of the compiled native System
 ![Electronic Design Automation Web Workbench](Screenshots/frontend.png)
 
 #### Architectural Analysis of Frontend Dashboard Interface
-Figure 2 showcases the dark-mode EDA visual dashboard operating at `http://localhost:3000`. The interface synthesizes hardware memory states, power calculations, and execution telemetry into an integrated supervisory display:
+Figure 2 showcases the dark-mode EDA visual dashboard operating locally at `http://localhost:3000` or live on [GitHub Pages](https://chandansaipavanpadala.github.io/sysc-cam-power/). The interface synthesizes hardware memory states, power calculations, and execution telemetry into an integrated supervisory display:
 1. **Scenario Navigation Toolbar:** Segmented pill selectors allow one-click traversal across test scenarios (TC1 through TC5) with live status badges.
 2. **ESL Power & Energy Engine:**
    * Radial SVG gauge displays instantaneous power ($P_{\text{total}}$) alongside cumulative microjoules.
@@ -520,7 +533,7 @@ Figure 2 showcases the dark-mode EDA visual dashboard operating at `http://local
    * 160 individual storage cells render bitwise XOR comparisons (emerald for match, crimson for mismatch).
    * Match lines indicate capacitive discharge states (`DISCHARGED` vs `MATCH`).
    * Reflects in-situ writes from TC3 and TC4 directly in the visual matrix.
-4. **Live Command Generator & Kernel Trace:** Allows interactive specification of custom search queries or memory writes with live REST triggering of `sim.exe`.
+4. **Live Command Generator & Kernel Trace:** Allows interactive specification of custom search queries or memory writes with live REST triggering of `sim.exe` (locally) or instant client-side execution (on cloud).
 
 ---
 
@@ -546,11 +559,16 @@ Signal transitions across all 10 primitive channels are dumped into `Backend/cam
 ### Prerequisites
 - **Compiler**: GCC / MinGW g++ with C++17 support.
 - **SystemC**: SystemC 2.3.x or 3.0.x installed at `C:/systemc` (or adjust `-I` and `-L` paths).
-- **Node.js**: v14+ (for Web Visual Workbench).
+- **Node.js**: v14+ (for Web Visual Workbench local server).
 
 ### Launch Options
 
-#### Option 1: One-Click Web Visual Workbench (Recommended)
+#### Option 0: Live Cloud Web Visualizer (Zero Installation Required)
+Directly test and explore the CAM Electronic Design Automation (EDA) dashboard hosted on GitHub Pages:
+- 🌐 **Live URL**: [https://chandansaipavanpadala.github.io/sysc-cam-power/](https://chandansaipavanpadala.github.io/sysc-cam-power/)
+- Supports interactive multi-cycle stepping, automated playback, test case presets (TC1–TC5), custom vector injection, and live Hamming distance calculations directly in the browser.
+
+#### Option 1: One-Click Web Visual Workbench (Local Node.js Bridge)
 ```cmd
 .\run_web.bat
 ```
@@ -569,6 +587,19 @@ cd Backend
 make
 make run
 ```
+
+---
+
+## Continuous Integration & Automated Deployment
+
+This repository features an automated CI/CD pipeline powered by GitHub Actions ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)):
+
+- **Automated Workflow:** Every `git push` to the `main` branch automatically triggers the build and deployment workflow.
+- **Site Packaging:** The workflow bundles the `Frontend/` application alongside the compiled SystemC execution telemetry (`Backend/simulation_data.json`) and waveform traces (`Backend/cam_trace.vcd`).
+- **Official Pages Action:** Deploys zero-downtime static builds using GitHub's official `actions/upload-pages-artifact@v3` and `actions/deploy-pages@v4`.
+- **Dual-Engine Architecture:**
+  - **Local Execution:** When launched locally with `server.js`, custom queries trigger the native MinGW-compiled C++ SystemC binary (`sim.exe`) via REST endpoints.
+  - **Cloud Execution:** When accessed via GitHub Pages, the frontend automatically falls back to an internal client-side simulation engine, executing bitwise XOR operations, priority address resolution, and dynamic power estimation entirely within the browser.
 
 ---
 
