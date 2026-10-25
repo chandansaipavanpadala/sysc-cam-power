@@ -230,7 +230,7 @@ function setOperationMode(mode) {
 async function loadSimulationData() {
     dom.statusText.textContent = 'Loading Dataset...';
     try {
-        const res = await fetch('/simulation_data.json?t=' + Date.now());
+        const res = await fetch('simulation_data.json?t=' + Date.now());
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         

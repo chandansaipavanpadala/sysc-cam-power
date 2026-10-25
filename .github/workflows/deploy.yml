@@ -1,0 +1,54 @@
+name: Deploy Web Visualizer to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+# Grant GITHUB_TOKEN the permissions required to deploy to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment, skipping runs queued between in-progress and latest
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare static site directory
+        run: |
+          mkdir -p _site
+          cp -r Frontend/* _site/
+          # Ensure SystemC simulation telemetry and trace files are at site root
+          if [ -f Backend/simulation_data.json ]; then
+            cp Backend/simulation_data.json _site/
+          fi
+          if [ -f Backend/cam_trace.vcd ]; then
+            cp Backend/cam_trace.vcd _site/
+          fi
+          if [ -d Screenshots ]; then
+            cp -r Screenshots _site/
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
